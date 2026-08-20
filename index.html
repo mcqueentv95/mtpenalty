@@ -1,0 +1,2263 @@
+<!DOCTYPE html>
+<html lang="vi">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Hệ Thống Quản Lý Thưởng / Phạt Nhân Sự</title>
+    <!-- Tailwind CSS -->
+    <script src="https://cdn.tailwindcss.com"></script>
+    <!-- FontAwesome Icons -->
+    <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.0/css/all.min.css">
+    <!-- Chart.js -->
+    <script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
+    <!-- SheetJS for Export Excel / CSV -->
+    <script src="https://cdn.jsdelivr.net/npm/xlsx-js-style@1.2.0/dist/xlsx.bundle.js"></script>
+    <style>
+        @import url('https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700&display=swap');
+        body { font-family: 'Inter', sans-serif; background-color: #f8fafc; }
+        .export-preview-font { font-family: 'Times New Roman', Times, serif; }
+        .table-sticky-header th { position: sticky; top: 0; z-index: 10; }
+        .custom-scrollbar::-webkit-scrollbar { width: 6px; height: 6px; }
+        .custom-scrollbar::-webkit-scrollbar-track { background: #f1f5f9; }
+        .custom-scrollbar::-webkit-scrollbar-thumb { background: #cbd5e1; border-radius: 4px; }
+        .custom-scrollbar::-webkit-scrollbar-thumb:hover { background: #94a3b8; }
+
+        /* Resizable columns */
+        .resizable-th { position: relative; overflow: hidden; }
+        .col-resizer {
+            position: absolute; top: 0; right: 0; width: 6px; height: 100%;
+            cursor: col-resize; user-select: none; touch-action: none;
+            background: transparent; z-index: 20;
+        }
+        .col-resizer:hover, .col-resizer.resizing { background: #6366f1; }
+        .sortable-th { cursor: pointer; user-select: none; }
+        .sortable-th:hover { background-color: #e2e8f0; }
+        .sort-icon { opacity: .35; margin-left: 4px; font-size: 10px; }
+        .sort-icon.active { opacity: 1; color: #4f46e5; }
+
+        /* Drag & drop rows for CBNV list */
+        .drag-row { cursor: grab; }
+        .drag-row.dragging { opacity: .4; background: #eef2ff; }
+        .drag-row.drag-over { border-top: 2px solid #6366f1; }
+        .drag-handle { cursor: grab; color: #94a3b8; }
+        .drag-handle:hover { color: #6366f1; }
+
+        /* Autocomplete suggestion panel */
+        .autocomplete-panel { position: absolute; z-index: 40; left: 0; right: 0; top: 100%;
+            background: white; border: 1px solid #cbd5e1; border-radius: 0.5rem; box-shadow: 0 6px 16px -4px rgba(0,0,0,.15);
+            max-height: 160px; overflow-y: auto; }
+        .autocomplete-item { padding: 6px 10px; font-size: 12px; cursor: pointer; border-bottom: 1px solid #f1f5f9; }
+        .autocomplete-item:hover { background: #eef2ff; }
+        .top10-badge { background: linear-gradient(135deg,#fbbf24,#f59e0b); color:#78350f; }
+
+        /* Login screen watermark (con dấu lặp lại nền) */
+        .login-watermark-bg { position: relative; background-color: #eef2f7; overflow: hidden; }
+        .login-watermark-bg::before {
+            content: "";
+            position: absolute;
+            top: -60%; left: -60%; width: 220%; height: 220%;
+            background-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 220 220'%3E%3Ccircle cx='110' cy='110' r='95' fill='none' stroke='%23dc2626' stroke-width='4'/%3E%3Ccircle cx='110' cy='110' r='82' fill='none' stroke='%23dc2626' stroke-width='2'/%3E%3Cpath id='arcTop' d='M 30 110 A 80 80 0 1 1 189.9 109' fill='none'/%3E%3Ctext font-family='Arial, sans-serif' font-size='16' font-weight='bold' fill='%23dc2626' letter-spacing='2'%3E%3CtextPath href='%23arcTop'%3ETUNGDUCNGUYEN95%3C/textPath%3E%3C/text%3E%3Ctext x='110' y='118' text-anchor='middle' font-family='Georgia, serif' font-size='26' font-weight='bold' fill='%23dc2626'%3EMT%3C/text%3E%3Ctext x='110' y='145' text-anchor='middle' font-family='Arial, sans-serif' font-size='10' fill='%23dc2626' letter-spacing='2'%3ECONFIDENTIAL%3C/text%3E%3C/svg%3E");
+            background-repeat: repeat;
+            background-size: 260px 260px;
+            transform: rotate(-22deg);
+            opacity: 0.14;
+            pointer-events: none;
+        }
+        /* Phân quyền tài khoản khách (chỉ xem) */
+        body.role-viewer .edit-only { display: none !important; }
+        body.role-viewer .role-viewer-only { display: block !important; }
+        body.role-viewer { user-select: none; -webkit-user-select: none; -moz-user-select: none; }
+        body.role-viewer img, body.role-viewer table { -webkit-user-drag: none; }
+
+        /* Màn hình ẩn nội dung khi tài khoản khách rời trang / chuyển ứng dụng khác */
+        #privacy-shield { background: #0f172a; }
+    </style>
+</head>
+<body class="text-slate-800 flex flex-col min-h-screen">
+
+    <!-- LOGIN SCREEN (bảo mật đăng nhập) -->
+    <div id="login-screen" class="fixed inset-0 z-[100] flex items-center justify-center login-watermark-bg p-4">
+        <div class="bg-white rounded-2xl shadow-2xl border border-slate-200 w-full max-w-sm p-8 relative z-10">
+            <div class="text-center mb-6">
+                <div class="mx-auto w-14 h-14 bg-indigo-600 rounded-xl flex items-center justify-center text-white text-2xl mb-3">
+                    <i class="fa-solid fa-lock"></i>
+                </div>
+                <h2 class="text-lg font-bold text-slate-800">Đăng Nhập Hệ Thống</h2>
+                <p class="text-xs text-slate-500 mt-1">Quản lý Thưởng/Phạt Nhân Sự</p>
+            </div>
+            <form id="form-login" onsubmit="handleLogin(event)" class="space-y-4">
+                <div>
+                    <label class="block text-xs font-semibold text-slate-600 mb-1">Tài khoản</label>
+                    <input type="text" id="login-username" autocomplete="username" required placeholder="Nhập tài khoản..."
+                        class="w-full bg-slate-50 border border-slate-300 rounded-lg p-2.5 text-sm focus:ring-indigo-500 focus:border-indigo-500">
+                </div>
+                <div>
+                    <label class="block text-xs font-semibold text-slate-600 mb-1">Mật khẩu</label>
+                    <input type="password" id="login-password" autocomplete="current-password" required placeholder="Nhập mật khẩu..."
+                        class="w-full bg-slate-50 border border-slate-300 rounded-lg p-2.5 text-sm focus:ring-indigo-500 focus:border-indigo-500">
+                </div>
+                <p id="login-error" class="text-xs text-red-600 font-medium hidden">
+                    <i class="fa-solid fa-circle-exclamation mr-1"></i>Sai tài khoản hoặc mật khẩu, vui lòng thử lại.
+                </p>
+                <button type="submit" class="w-full bg-indigo-600 hover:bg-indigo-700 text-white font-semibold py-2.5 rounded-lg transition">
+                    <i class="fa-solid fa-right-to-bracket mr-1.5"></i>Đăng Nhập
+                </button>
+            </form>
+        </div>
+    </div>
+
+    <!-- MÀN HÌNH ẨN NỘI DUNG (chỉ áp dụng cho tài khoản khách khi rời trang / chuyển ứng dụng khác) -->
+    <div id="privacy-shield" class="fixed inset-0 z-[300] flex items-center justify-center hidden p-4">
+        <div class="text-center max-w-sm">
+            <div class="mx-auto w-16 h-16 bg-slate-800 rounded-2xl flex items-center justify-center text-slate-300 text-3xl mb-4">
+                <i class="fa-solid fa-eye-slash"></i>
+            </div>
+            <h2 class="text-white text-lg font-bold mb-2">Nội Dung Đã Được Ẩn Để Bảo Mật</h2>
+            <p class="text-slate-400 text-sm mb-6">Bạn vừa rời khỏi trang hoặc chuyển sang ứng dụng khác. Nội dung sẽ tiếp tục được ẩn cho đến khi bạn xác nhận.</p>
+            <button onclick="dismissPrivacyShield()" class="bg-indigo-600 hover:bg-indigo-700 text-white font-semibold px-6 py-2.5 rounded-lg transition">
+                <i class="fa-solid fa-eye mr-1.5"></i>Nhấn Để Tiếp Tục Xem
+            </button>
+        </div>
+    </div>
+
+    <!-- Header Navigation -->
+    <header class="bg-slate-900 text-white shadow-lg sticky top-0 z-50">
+        <div class="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8">
+            <div class="flex items-center justify-between h-16 flex-wrap gap-2">
+                <div class="flex items-center space-x-3">
+                    <div class="bg-indigo-600 p-2 rounded-lg text-white">
+                        <i class="fa-solid fa-scale-balanced text-xl"></i>
+                    </div>
+                    <div>
+                        <h1 class="text-lg font-bold leading-tight">HR Penalty & Reward Management</h1>
+                        <p class="text-xs text-slate-400">Quản lý Thưởng/Phạt Nhân sự</p>
+                    </div>
+                </div>
+
+                <!-- Navigation Tabs -->
+                <nav class="flex space-x-1 bg-slate-800 p-1 rounded-xl">
+                    <button onclick="switchTab('dashboard')" id="tab-btn-dashboard" 
+                        class="tab-btn px-4 py-2 text-sm font-semibold rounded-lg transition-all duration-200 bg-indigo-600 text-white shadow">
+                        <i class="fa-solid fa-chart-pie mr-2"></i>Dashboard Tổng Quan
+                    </button>
+                    <button onclick="switchTab('monthly')" id="tab-btn-monthly" 
+                        class="tab-btn px-4 py-2 text-sm font-semibold rounded-lg transition-all duration-200 text-slate-300 hover:text-white hover:bg-slate-700">
+                        <i class="fa-solid fa-list-check mr-2"></i>Chi Tiết Thưởng/Phạt
+                    </button>
+                    <button onclick="switchTab('staff')" id="tab-btn-staff" 
+                        class="tab-btn px-4 py-2 text-sm font-semibold rounded-lg transition-all duration-200 text-slate-300 hover:text-white hover:bg-slate-700">
+                        <i class="fa-solid fa-users mr-2"></i>Danh Sách CBNV
+                    </button>
+                </nav>
+
+                <span id="role-badge" class="hidden text-[11px] font-bold px-2.5 py-1 rounded-full bg-amber-500/20 text-amber-300 border border-amber-500/40">
+                    <i class="fa-solid fa-eye mr-1"></i>Khách - Chỉ Xem
+                </span>
+
+                <button onclick="openModalSync()" title="Đồng bộ dữ liệu Online" class="text-slate-300 hover:text-white text-sm px-2.5 py-2 rounded-lg hover:bg-slate-700 transition relative">
+                    <i class="fa-solid fa-cloud-arrow-up"></i>
+                    <span id="sync-status-dot" class="absolute top-1 right-1 w-2 h-2 rounded-full bg-slate-500"></span>
+                </button>
+                <button onclick="handleLogout()" title="Đăng xuất" class="text-slate-300 hover:text-white text-sm px-2.5 py-2 rounded-lg hover:bg-slate-700 transition">
+                    <i class="fa-solid fa-right-from-bracket"></i>
+                </button>
+            </div>
+        </div>
+    </header>
+
+    <!-- Main Content Container -->
+    <main class="flex-grow max-w-7xl w-full mx-auto px-4 sm:px-6 lg:px-8 py-6">
+
+        <!-- ==================== TAB 1: DASHBOARD ==================== -->
+        <section id="tab-dashboard" class="tab-content space-y-6">
+            <!-- Filter Bar -->
+            <div class="bg-white p-4 rounded-xl shadow-sm border border-slate-200 flex flex-wrap items-center justify-between gap-4">
+                <div class="flex flex-wrap items-center gap-3">
+                    <span class="text-sm font-semibold text-slate-600"><i class="fa-solid fa-filter text-indigo-500 mr-1"></i> Bộ lọc:</span>
+                    <select id="dash-year" onchange="updateDashboard()" class="bg-slate-50 border border-slate-300 text-slate-800 text-sm rounded-lg p-2 focus:ring-indigo-500 focus:border-indigo-500">
+                        <option value="2026" selected>Năm 2026</option>
+                        <option value="2025">Năm 2025</option>
+                    </select>
+                    <select id="dash-dept" onchange="updateDashboard()" class="bg-slate-50 border border-slate-300 text-slate-800 text-sm rounded-lg p-2 focus:ring-indigo-500 focus:border-indigo-500">
+                        <option value="ALL">Tất cả Đơn vị / Phòng ban</option>
+                        <option value="VPHN">VPHN</option>
+                        <option value="CNHB">CNHB</option>
+                        <option value="HNBG">HNBG</option>
+                    </select>
+                </div>
+                <div class="flex items-center space-x-2">
+                    <button onclick="exportDashboard('excel')" class="edit-only bg-emerald-600 hover:bg-emerald-700 text-white text-sm px-3.5 py-2 rounded-lg font-medium shadow-sm transition flex items-center">
+                        <i class="fa-solid fa-file-excel mr-2"></i> Xuất Excel Dashboard
+                    </button>
+                    <button onclick="exportDashboard('csv')" class="edit-only bg-slate-700 hover:bg-slate-800 text-white text-sm px-3.5 py-2 rounded-lg font-medium shadow-sm transition flex items-center">
+                        <i class="fa-solid fa-file-csv mr-2"></i> CSV
+                    </button>
+                </div>
+            </div>
+
+            <!-- KPI Cards -->
+            <div class="grid grid-cols-1 md:grid-cols-4 gap-4">
+                <div class="bg-white p-5 rounded-xl border border-slate-200 shadow-sm flex items-center space-x-4">
+                    <div class="p-3 bg-red-100 text-red-600 rounded-xl"><i class="fa-solid fa-triangle-exclamation text-2xl"></i></div>
+                    <div>
+                        <p class="text-xs font-semibold text-slate-500 uppercase tracking-wider">Tổng Lỗi Vi Phạm</p>
+                        <h3 id="kpi-penalty" class="text-2xl font-bold text-slate-900">0</h3>
+                    </div>
+                </div>
+                <div class="bg-white p-5 rounded-xl border border-slate-200 shadow-sm flex items-center space-x-4">
+                    <div class="p-3 bg-emerald-100 text-emerald-600 rounded-xl"><i class="fa-solid fa-award text-2xl"></i></div>
+                    <div>
+                        <p class="text-xs font-semibold text-slate-500 uppercase tracking-wider">Tổng Lần Khen Thưởng</p>
+                        <h3 id="kpi-reward" class="text-2xl font-bold text-slate-900">0</h3>
+                    </div>
+                </div>
+                <div class="bg-white p-5 rounded-xl border border-slate-200 shadow-sm flex items-center space-x-4">
+                    <div class="p-3 bg-indigo-100 text-indigo-600 rounded-xl"><i class="fa-solid fa-users text-2xl"></i></div>
+                    <div>
+                        <p class="text-xs font-semibold text-slate-500 uppercase tracking-wider">Số NV Có Hồ Sơ T/P</p>
+                        <h3 id="kpi-users" class="text-2xl font-bold text-slate-900">0</h3>
+                    </div>
+                </div>
+                <div class="bg-white p-5 rounded-xl border border-slate-200 shadow-sm flex items-center space-x-4">
+                    <div class="p-3 bg-amber-100 text-amber-600 rounded-xl"><i class="fa-solid fa-scale-unbalanced-flip text-2xl"></i></div>
+                    <div>
+                        <p class="text-xs font-semibold text-slate-500 uppercase tracking-wider">Chênh Lệch T/P</p>
+                        <h3 id="kpi-net" class="text-2xl font-bold text-slate-900">0</h3>
+                    </div>
+                </div>
+            </div>
+
+            <!-- Charts Section -->
+            <div class="grid grid-cols-1 lg:grid-cols-2 gap-6">
+                <div class="bg-white p-5 rounded-xl border border-slate-200 shadow-sm">
+                    <h3 class="text-base font-bold text-slate-800 mb-4 flex items-center">
+                        <i class="fa-solid fa-chart-column text-indigo-600 mr-2"></i> Xu hướng Thưởng/Phạt Theo Tháng
+                    </h3>
+                    <div class="h-64"><canvas id="chart-trend"></canvas></div>
+                </div>
+                <div class="bg-white p-5 rounded-xl border border-slate-200 shadow-sm">
+                    <div class="flex items-center justify-between gap-2 mb-4">
+                        <h3 class="text-base font-bold text-slate-800 flex items-center">
+                            <i class="fa-solid fa-chart-pie text-indigo-600 mr-2"></i> Tỷ lệ Lỗi Vi Phạm
+                        </h3>
+                        <select id="dash-pie-scope" onchange="updateDashboard()" class="bg-indigo-50 border border-indigo-300 text-indigo-900 text-xs font-semibold rounded-lg px-2 py-1.5">
+                            <option value="unit" selected>Toàn bộ nhân viên / Theo đơn vị</option>
+                            <option value="person">Cá nhân / Theo nhân viên</option>
+                        </select>
+                    </div>
+                    <div class="h-64"><canvas id="chart-dept"></canvas></div>
+                </div>
+            </div>
+
+            <!-- Dashboard Master Table -->
+            <div class="bg-white rounded-xl border border-slate-200 shadow-sm overflow-hidden">
+                <div class="p-4 bg-slate-50 border-b border-slate-200 flex items-center justify-between flex-wrap gap-3">
+                    <div>
+                        <h3 class="text-base font-bold text-slate-800"><i class="fa-solid fa-table-cells mr-2 text-indigo-600"></i> Bảng Báo Cáo Tổng Số Lỗi Vi Phạm & Khen Thưởng Nhân Viên</h3>
+                        <span class="text-xs text-slate-500">Top 10 được ưu tiên hiển thị ở đầu bảng; cuộn xuống để xem tiếp toàn bộ nhân viên. Kéo viền phải mỗi cột để căn chỉnh độ rộng.</span>
+                    </div>
+                    <div class="flex items-center gap-2">
+                        <label class="text-xs font-semibold text-slate-600 whitespace-nowrap"><i class="fa-solid fa-ranking-star text-amber-500 mr-1"></i>Xếp hạng Top 10 theo:</label>
+                        <select id="dash-sort-mode" onchange="updateDashboard()" class="bg-amber-50 border border-amber-300 text-amber-900 font-semibold text-xs rounded-lg p-2 focus:ring-indigo-500 focus:border-indigo-500">
+                            <option value="phat" selected>Top 10 Vi phạm nhiều nhất (giảm dần)</option>
+                            <option value="thuong">Top 10 Khen thưởng nhiều nhất (giảm dần)</option>
+                        </select>
+                    </div>
+                </div>
+                <div class="overflow-x-auto custom-scrollbar max-h-[500px]">
+                    <table id="table-dashboard" class="w-full text-xs text-left text-slate-600 border-collapse table-fixed">
+                        <colgroup>
+                            <col id="dashcol-0" style="width:50px">
+                            <col id="dashcol-1" style="width:150px">
+                            <col id="dashcol-2" style="width:80px">
+                            <col id="dashcol-3" style="width:22px"><col id="dashcol-4" style="width:22px">
+                            <col id="dashcol-5" style="width:22px"><col id="dashcol-6" style="width:22px">
+                            <col id="dashcol-7" style="width:22px"><col id="dashcol-8" style="width:22px">
+                            <col id="dashcol-9" style="width:22px"><col id="dashcol-10" style="width:22px">
+                            <col id="dashcol-11" style="width:22px"><col id="dashcol-12" style="width:22px">
+                            <col id="dashcol-13" style="width:22px"><col id="dashcol-14" style="width:22px">
+                            <col id="dashcol-15" style="width:22px"><col id="dashcol-16" style="width:22px">
+                            <col id="dashcol-17" style="width:22px"><col id="dashcol-18" style="width:22px">
+                            <col id="dashcol-19" style="width:22px"><col id="dashcol-20" style="width:22px">
+                            <col id="dashcol-21" style="width:22px"><col id="dashcol-22" style="width:22px">
+                            <col id="dashcol-23" style="width:22px"><col id="dashcol-24" style="width:22px">
+                            <col id="dashcol-25" style="width:22px"><col id="dashcol-26" style="width:22px">
+                            <col id="dashcol-27" style="width:75px">
+                            <col id="dashcol-28" style="width:80px">
+                            <col id="dashcol-29" style="width:70px">
+                            <col id="dashcol-30" style="width:110px">
+                        </colgroup>
+                        <thead class="bg-slate-100 text-slate-700 uppercase text-[11px] font-bold sticky top-0 z-10 shadow-sm">
+                            <tr>
+                                <th rowspan="3" class="px-3 py-2 border border-slate-300 text-center bg-slate-200 resizable-th">Hạng<div class="col-resizer" data-col-target="dashcol-0"></div></th>
+                                <th rowspan="3" class="px-4 py-2 border border-slate-300 bg-slate-200 resizable-th">Họ Tên<div class="col-resizer" data-col-target="dashcol-1"></div></th>
+                                <th rowspan="3" class="px-3 py-2 border border-slate-300 text-center bg-slate-200 resizable-th">Đơn Vị<div class="col-resizer" data-col-target="dashcol-2"></div></th>
+                                <th colspan="24" class="px-3 py-1 border border-slate-300 text-center bg-indigo-50 text-indigo-900">THÁNG - 2026</th>
+                                <th rowspan="3" class="px-3 py-2 border border-slate-300 text-center bg-red-100 text-red-800 resizable-th">Tổng Phạt<div class="col-resizer" data-col-target="dashcol-27"></div></th>
+                                <th rowspan="3" class="px-3 py-2 border border-slate-300 text-center bg-emerald-100 text-emerald-800 resizable-th">Tổng Thưởng<div class="col-resizer" data-col-target="dashcol-28"></div></th>
+                                <th rowspan="3" class="px-3 py-2 border border-slate-300 text-center bg-indigo-100 text-indigo-800 resizable-th">Tổng T/P<div class="col-resizer" data-col-target="dashcol-29"></div></th>
+                                <th rowspan="3" class="px-3 py-2 border border-slate-300 text-center bg-orange-100 text-orange-800 resizable-th">Tổng Ngày Công Phạt<div class="col-resizer" data-col-target="dashcol-30"></div></th>
+                            </tr>
+                            <tr class="bg-indigo-50/50">
+                                <th colspan="2" class="border border-slate-300 text-center py-1">T1</th>
+                                <th colspan="2" class="border border-slate-300 text-center py-1">T2</th>
+                                <th colspan="2" class="border border-slate-300 text-center py-1">T3</th>
+                                <th colspan="2" class="border border-slate-300 text-center py-1">T4</th>
+                                <th colspan="2" class="border border-slate-300 text-center py-1">T5</th>
+                                <th colspan="2" class="border border-slate-300 text-center py-1">T6</th>
+                                <th colspan="2" class="border border-slate-300 text-center py-1">T7</th>
+                                <th colspan="2" class="border border-slate-300 text-center py-1">T8</th>
+                                <th colspan="2" class="border border-slate-300 text-center py-1">T9</th>
+                                <th colspan="2" class="border border-slate-300 text-center py-1">T10</th>
+                                <th colspan="2" class="border border-slate-300 text-center py-1">T11</th>
+                                <th colspan="2" class="border border-slate-300 text-center py-1">T12</th>
+                            </tr>
+                            <tr class="bg-slate-200 text-slate-600 text-[10px]">
+                                <th class="border border-slate-300 text-center px-1 text-red-600 resizable-th">P<div class="col-resizer" data-col-target="dashcol-3"></div></th><th class="border border-slate-300 text-center px-1 text-emerald-600 resizable-th">T<div class="col-resizer" data-col-target="dashcol-4"></div></th>
+                                <th class="border border-slate-300 text-center px-1 text-red-600 resizable-th">P<div class="col-resizer" data-col-target="dashcol-5"></div></th><th class="border border-slate-300 text-center px-1 text-emerald-600 resizable-th">T<div class="col-resizer" data-col-target="dashcol-6"></div></th>
+                                <th class="border border-slate-300 text-center px-1 text-red-600 resizable-th">P<div class="col-resizer" data-col-target="dashcol-7"></div></th><th class="border border-slate-300 text-center px-1 text-emerald-600 resizable-th">T<div class="col-resizer" data-col-target="dashcol-8"></div></th>
+                                <th class="border border-slate-300 text-center px-1 text-red-600 resizable-th">P<div class="col-resizer" data-col-target="dashcol-9"></div></th><th class="border border-slate-300 text-center px-1 text-emerald-600 resizable-th">T<div class="col-resizer" data-col-target="dashcol-10"></div></th>
+                                <th class="border border-slate-300 text-center px-1 text-red-600 resizable-th">P<div class="col-resizer" data-col-target="dashcol-11"></div></th><th class="border border-slate-300 text-center px-1 text-emerald-600 resizable-th">T<div class="col-resizer" data-col-target="dashcol-12"></div></th>
+                                <th class="border border-slate-300 text-center px-1 text-red-600 resizable-th">P<div class="col-resizer" data-col-target="dashcol-13"></div></th><th class="border border-slate-300 text-center px-1 text-emerald-600 resizable-th">T<div class="col-resizer" data-col-target="dashcol-14"></div></th>
+                                <th class="border border-slate-300 text-center px-1 text-red-600 resizable-th">P<div class="col-resizer" data-col-target="dashcol-15"></div></th><th class="border border-slate-300 text-center px-1 text-emerald-600 resizable-th">T<div class="col-resizer" data-col-target="dashcol-16"></div></th>
+                                <th class="border border-slate-300 text-center px-1 text-red-600 resizable-th">P<div class="col-resizer" data-col-target="dashcol-17"></div></th><th class="border border-slate-300 text-center px-1 text-emerald-600 resizable-th">T<div class="col-resizer" data-col-target="dashcol-18"></div></th>
+                                <th class="border border-slate-300 text-center px-1 text-red-600 resizable-th">P<div class="col-resizer" data-col-target="dashcol-19"></div></th><th class="border border-slate-300 text-center px-1 text-emerald-600 resizable-th">T<div class="col-resizer" data-col-target="dashcol-20"></div></th>
+                                <th class="border border-slate-300 text-center px-1 text-red-600 resizable-th">P<div class="col-resizer" data-col-target="dashcol-21"></div></th><th class="border border-slate-300 text-center px-1 text-emerald-600 resizable-th">T<div class="col-resizer" data-col-target="dashcol-22"></div></th>
+                                <th class="border border-slate-300 text-center px-1 text-red-600 resizable-th">P<div class="col-resizer" data-col-target="dashcol-23"></div></th><th class="border border-slate-300 text-center px-1 text-emerald-600 resizable-th">T<div class="col-resizer" data-col-target="dashcol-24"></div></th>
+                                <th class="border border-slate-300 text-center px-1 text-red-600 resizable-th">P<div class="col-resizer" data-col-target="dashcol-25"></div></th><th class="border border-slate-300 text-center px-1 text-emerald-600 resizable-th">T<div class="col-resizer" data-col-target="dashcol-26"></div></th>
+                            </tr>
+                        </thead>
+                        <tbody id="tbody-dashboard" class="divide-y divide-slate-200 bg-white">
+                            <!-- Populated dynamically -->
+                        </tbody>
+                    </table>
+                </div>
+            </div>
+        </section>
+
+        <!-- ==================== TAB 2: CHI TIẾT THƯỞNG/PHẠT ==================== -->
+        <section id="tab-monthly" class="tab-content hidden space-y-6">
+            <!-- Selector & Tools -->
+            <div class="bg-white p-4 rounded-xl shadow-sm border border-slate-200 flex flex-wrap items-center justify-between gap-4">
+                <div class="flex flex-wrap items-center gap-3">
+                    <label class="text-sm font-bold text-slate-700 flex items-center">
+                        <i class="fa-solid fa-calendar-days text-indigo-600 mr-2"></i> Chọn Kỳ Tháng:
+                    </label>
+                    <select id="monthly-period" onchange="updateMonthlyView()" class="bg-indigo-50 border border-indigo-300 text-indigo-900 font-bold text-sm rounded-lg p-2.5 focus:ring-indigo-500 focus:border-indigo-500">
+                        <option value="T8.26">Tháng 08/2026 (Kỳ T8.26)</option>
+                        <option value="T7.26">Tháng 07/2026 (Kỳ T7.26)</option>
+                        <option value="T6.26">Tháng 06/2026 (Kỳ T6.26)</option>
+                        <option value="T5.26">Tháng 05/2026 (Kỳ T5.26)</option>
+                        <option value="T4.26">Tháng 04/2026 (Kỳ T4.26)</option>
+                        <option value="T3.26">Tháng 03/2026 (Kỳ T3.26)</option>
+                        <option value="T2.26">Tháng 02/2026 (Kỳ T2.26)</option>
+                        <option value="T1.26">Tháng 01/2026 (Kỳ T1.26)</option>
+                        <option value="T12.25">Tháng 12/2025 (Kỳ T12.25)</option>
+                        <option value="T8.25">Tháng 08/2025 (Kỳ T8.25)</option>
+                    </select>
+                    <button onclick="openModalAddPeriod()" title="Thêm kỳ tháng mới" class="edit-only bg-indigo-100 hover:bg-indigo-200 text-indigo-700 text-sm px-3 py-2.5 rounded-lg font-semibold transition flex items-center whitespace-nowrap">
+                        <i class="fa-solid fa-calendar-plus mr-1.5"></i> Thêm Kỳ Mới
+                    </button>
+
+                    <div class="relative min-w-[220px]">
+                        <input type="text" id="monthly-search" onkeyup="filterMonthlyTable()" placeholder="Tìm theo tên, lý do..." class="w-full bg-slate-50 border border-slate-300 text-slate-800 text-sm rounded-lg pl-9 pr-3 py-2 focus:ring-indigo-500 focus:border-indigo-500">
+                        <i class="fa-solid fa-magnifying-glass absolute left-3 top-2.5 text-slate-400"></i>
+                    </div>
+                </div>
+
+                <div class="flex items-center space-x-2">
+                    <button onclick="openModalAddRecord()" class="edit-only bg-indigo-600 hover:bg-indigo-700 text-white text-sm px-3.5 py-2 rounded-lg font-medium shadow-sm transition flex items-center">
+                        <i class="fa-solid fa-plus mr-1.5"></i> Thêm Vi Phạm / Thưởng
+                    </button>
+                    <button onclick="document.getElementById('monthly-import-file').click()" class="edit-only bg-blue-600 hover:bg-blue-700 text-white text-sm px-3.5 py-2 rounded-lg font-medium shadow-sm transition flex items-center">
+                        <i class="fa-solid fa-file-import mr-1.5"></i> Nhập Excel
+                    </button>
+                    <input id="monthly-import-file" type="file" accept=".xlsx,.xls,.csv" class="hidden" onchange="importMonthlyExcel(event)">
+                    <button onclick="exportMonthly('excel')" class="edit-only bg-emerald-600 hover:bg-emerald-700 text-white text-sm px-3.5 py-2 rounded-lg font-medium shadow-sm transition flex items-center">
+                        <i class="fa-solid fa-file-excel mr-1.5"></i> Xuất Excel Tháng
+                    </button>
+                    <button onclick="exportMonthly('csv')" class="edit-only bg-slate-700 hover:bg-slate-800 text-white text-sm px-3.5 py-2 rounded-lg font-medium shadow-sm transition flex items-center">
+                        <i class="fa-solid fa-file-csv mr-1.5"></i> CSV
+                    </button>
+                </div>
+            </div>
+            <p id="monthly-title" class="text-sm font-bold text-slate-700 -mb-2"></p>
+            <p class="edit-only text-xs text-slate-500 -mt-3"><i class="fa-solid fa-hand-pointer mr-1"></i>Kéo thả từng dòng để sắp xếp thủ công. Thứ tự thủ công được giữ nguyên và không phụ thuộc Ngày sự vụ.</p>
+
+            <!-- PHẠT & HỦY PANEL (gộp chung) -->
+            <div class="bg-white rounded-xl border border-slate-200 shadow-sm overflow-hidden">
+                <div class="p-3 bg-red-50 border-b border-red-200 flex items-center justify-between flex-wrap gap-2">
+                    <h3 class="text-sm font-bold text-red-700"><i class="fa-solid fa-circle-exclamation mr-2"></i>DANH SÁCH PHIẾU PHẠT &amp; HỦY</h3>
+                    <div class="flex items-center gap-2">
+                        <span id="badge-count-phat" class="bg-red-100 text-red-700 px-2.5 py-1 rounded-full text-xs font-semibold">Phạt: 0</span>
+                        <span id="badge-count-huy" class="bg-slate-200 text-slate-600 px-2.5 py-1 rounded-full text-xs font-semibold">Hủy: 0</span>
+                    </div>
+                </div>
+                <div class="overflow-x-auto custom-scrollbar">
+                    <table id="table-phat" class="w-full text-xs text-left text-slate-600 border-collapse table-fixed">
+                        <thead class="bg-slate-100 text-slate-700 uppercase font-bold border-b border-slate-200">
+                            <tr id="thead-row-phat"></tr>
+                        </thead>
+                        <tbody id="tbody-phat" class="divide-y divide-slate-200 bg-white"></tbody>
+                    </table>
+                </div>
+            </div>
+
+            <!-- THƯỞNG PANEL -->
+            <div class="bg-white rounded-xl border border-slate-200 shadow-sm overflow-hidden">
+                <div class="p-3 bg-emerald-50 border-b border-emerald-200 flex items-center justify-between">
+                    <h3 class="text-sm font-bold text-emerald-700"><i class="fa-solid fa-award mr-2"></i>DANH SÁCH PHIẾU THƯỞNG</h3>
+                    <span id="badge-count-thuong" class="bg-emerald-100 text-emerald-700 px-2.5 py-1 rounded-full text-xs font-semibold">Thưởng: 0</span>
+                </div>
+                <div class="overflow-x-auto custom-scrollbar">
+                    <table id="table-thuong" class="w-full text-xs text-left text-slate-600 border-collapse table-fixed">
+                        <thead class="bg-slate-100 text-slate-700 uppercase font-bold border-b border-slate-200">
+                            <tr id="thead-row-thuong"></tr>
+                        </thead>
+                        <tbody id="tbody-thuong" class="divide-y divide-slate-200 bg-white"></tbody>
+                    </table>
+                </div>
+            </div>
+        </section>
+
+        <!-- ==================== TAB 3: DANH SÁCH CBNV ==================== -->
+        <section id="tab-staff" class="tab-content hidden space-y-6">
+            <div class="edit-only bg-white p-4 rounded-xl shadow-sm border border-slate-200">
+                <h3 class="text-sm font-bold text-slate-700 mb-3"><i class="fa-solid fa-user-plus text-indigo-600 mr-2"></i>Thêm Cán Bộ Nhân Viên</h3>
+                <form id="form-add-staff" onsubmit="addEmployee(event)" class="grid grid-cols-1 md:grid-cols-4 gap-3">
+                    <div class="md:col-span-2">
+                        <label class="block text-xs font-semibold text-slate-600 mb-1">Họ và tên <span class="text-red-500">*</span></label>
+                        <input type="text" id="staff-name" required placeholder="Nhập họ và tên..." class="w-full bg-slate-50 border border-slate-300 rounded-lg p-2 text-sm">
+                    </div>
+                    <div>
+                        <label class="block text-xs font-semibold text-slate-600 mb-1">Đơn vị</label>
+                        <input type="text" id="staff-unit" placeholder="VD: VPHN, CNHB..." class="w-full bg-slate-50 border border-slate-300 rounded-lg p-2 text-sm">
+                    </div>
+                    <div>
+                        <label class="block text-xs font-semibold text-slate-600 mb-1">Phòng ban</label>
+                        <input type="text" id="staff-dept" placeholder="VD: HCNS, Kế toán..." class="w-full bg-slate-50 border border-slate-300 rounded-lg p-2 text-sm">
+                    </div>
+                    <div class="md:col-span-4 flex justify-end">
+                        <button type="submit" class="bg-indigo-600 hover:bg-indigo-700 text-white text-sm px-4 py-2 rounded-lg font-medium shadow-sm transition flex items-center">
+                            <i class="fa-solid fa-plus mr-1.5"></i> Thêm Nhân Viên
+                        </button>
+                    </div>
+                </form>
+            </div>
+
+            <div class="bg-white rounded-xl border border-slate-200 shadow-sm overflow-hidden">
+                <div class="p-4 bg-slate-50 border-b border-slate-200 flex items-center justify-between flex-wrap gap-3">
+                    <div>
+                        <h3 class="text-base font-bold text-slate-800"><i class="fa-solid fa-address-card mr-2 text-indigo-600"></i>Danh Sách Cán Bộ Nhân Viên</h3>
+                        <p class="edit-only text-xs text-slate-500 mt-0.5"><i class="fa-solid fa-arrows-up-down mr-1"></i>Kéo thả biểu tượng <i class="fa-solid fa-grip-vertical"></i> để sắp xếp lại thứ tự</p>
+                    </div>
+                    <div class="relative min-w-[220px]">
+                        <input type="text" id="staff-search" onkeyup="renderStaffTable()" placeholder="Tìm theo tên, đơn vị..." class="w-full bg-slate-50 border border-slate-300 text-slate-800 text-sm rounded-lg pl-9 pr-3 py-2 focus:ring-indigo-500 focus:border-indigo-500">
+                        <i class="fa-solid fa-magnifying-glass absolute left-3 top-2.5 text-slate-400"></i>
+                    </div>
+                </div>
+                <div class="overflow-x-auto custom-scrollbar">
+                    <table class="w-full text-xs text-left text-slate-600 border-collapse">
+                        <thead class="bg-slate-100 text-slate-700 uppercase font-bold border-b border-slate-200">
+                            <tr>
+                                <th class="px-3 py-3 border border-slate-200 text-center w-12">STT</th>
+                                <th class="px-4 py-3 border border-slate-200">Họ và Tên</th>
+                                <th class="px-3 py-3 border border-slate-200 text-center">Đơn Vị</th>
+                                <th class="px-3 py-3 border border-slate-200 text-center">Phòng Ban</th>
+                                <th class="px-3 py-3 border border-slate-200 text-center w-16">Thao Tác</th>
+                            </tr>
+                        </thead>
+                        <tbody id="tbody-staff" class="divide-y divide-slate-200 bg-white"></tbody>
+                    </table>
+                </div>
+            </div>
+        </section>
+
+    </main>
+
+    <!-- Footer -->
+    <footer class="bg-white border-t border-slate-200 py-4 mt-auto text-center text-xs text-slate-500">
+        Web App Quản lý Thưởng/Phạt Nhân Sự &copy; 2026 - Tích hợp Xuất Excel / CSV theo định dạng chuẩn.
+    </footer>
+
+    <!-- MODAL: THÊM KỲ THÁNG MỚI -->
+    <div id="modal-add-period" class="fixed inset-0 bg-slate-900/50 backdrop-blur-sm z-50 flex items-center justify-center hidden p-4">
+        <div class="bg-white rounded-xl shadow-xl border border-slate-200 max-w-sm w-full p-6 space-y-4">
+            <div class="flex items-center justify-between border-b pb-3">
+                <h3 class="text-base font-bold text-slate-800"><i class="fa-solid fa-calendar-plus text-indigo-600 mr-2"></i>Thêm Kỳ Tháng Mới</h3>
+                <button onclick="closeModalAddPeriod()" class="text-slate-400 hover:text-slate-600"><i class="fa-solid fa-xmark text-lg"></i></button>
+            </div>
+            <div class="grid grid-cols-2 gap-3">
+                <div>
+                    <label class="block text-xs font-semibold text-slate-700 mb-1">Tháng</label>
+                    <select id="new-period-month" class="w-full bg-slate-50 border border-slate-300 rounded-lg p-2 text-sm">
+                        <option value="1">Tháng 01</option><option value="2">Tháng 02</option><option value="3">Tháng 03</option>
+                        <option value="4">Tháng 04</option><option value="5">Tháng 05</option><option value="6">Tháng 06</option>
+                        <option value="7">Tháng 07</option><option value="8">Tháng 08</option><option value="9">Tháng 09</option>
+                        <option value="10">Tháng 10</option><option value="11">Tháng 11</option><option value="12">Tháng 12</option>
+                    </select>
+                </div>
+                <div>
+                    <label class="block text-xs font-semibold text-slate-700 mb-1">Năm</label>
+                    <input type="number" id="new-period-year" min="2000" max="2100" class="w-full bg-slate-50 border border-slate-300 rounded-lg p-2 text-sm">
+                </div>
+            </div>
+            <p id="new-period-error" class="text-xs text-red-600 font-medium hidden"><i class="fa-solid fa-circle-exclamation mr-1"></i>Kỳ tháng này đã tồn tại trong danh sách.</p>
+            <div class="pt-2 flex justify-end gap-2 border-t">
+                <button type="button" onclick="closeModalAddPeriod()" class="px-4 py-2 bg-slate-200 text-slate-700 rounded-lg hover:bg-slate-300 font-semibold text-sm">Hủy</button>
+                <button type="button" onclick="confirmAddPeriod()" class="px-4 py-2 bg-indigo-600 text-white rounded-lg hover:bg-indigo-700 font-semibold text-sm"><i class="fa-solid fa-plus mr-1.5"></i>Thêm Kỳ</button>
+            </div>
+        </div>
+    </div>
+
+    <!-- MODAL: ĐỒNG BỘ DỮ LIỆU ONLINE (Google Sheets + Apps Script) -->
+    <div id="modal-sync" class="fixed inset-0 bg-slate-900/50 backdrop-blur-sm z-50 flex items-center justify-center hidden p-4">
+        <div class="bg-white rounded-xl shadow-xl border border-slate-200 max-w-lg w-full p-6 space-y-4 max-h-[90vh] overflow-y-auto">
+            <div class="flex items-center justify-between border-b pb-3">
+                <h3 class="text-base font-bold text-slate-800"><i class="fa-solid fa-cloud-arrow-up text-indigo-600 mr-2"></i>Đồng Bộ Dữ Liệu Online</h3>
+                <button onclick="closeModalSync()" class="text-slate-400 hover:text-slate-600"><i class="fa-solid fa-xmark text-lg"></i></button>
+            </div>
+            <p class="text-xs text-slate-500">Dữ liệu (Danh sách CBNV + toàn bộ phiếu Thưởng/Phạt/Hủy) sẽ được lưu lên Google Sheets qua Apps Script Web App, để không bị mất khi đóng trình duyệt hoặc dùng trên máy khác.</p>
+
+            <div class="edit-only">
+                <label class="block text-xs font-semibold text-slate-700 mb-1">Apps Script Web App URL</label>
+                <input type="text" id="sync-url" placeholder="https://script.google.com/macros/s/.../exec" class="w-full bg-slate-50 border border-slate-300 rounded-lg p-2.5 text-xs font-mono">
+                <p class="text-[11px] text-slate-400 mt-1">URL này lấy được sau khi Deploy Apps Script dưới dạng Web App (Execute as: Me, Who has access: Anyone).</p>
+            </div>
+
+            <div class="edit-only flex items-center justify-between bg-slate-50 rounded-lg p-3">
+                <div>
+                    <p class="text-xs font-semibold text-slate-700">Tự động đồng bộ</p>
+                    <p class="text-[11px] text-slate-400">Tự lưu lên Cloud mỗi khi có thay đổi</p>
+                </div>
+                <label class="relative inline-flex items-center cursor-pointer">
+                    <input type="checkbox" id="sync-autosync" class="sr-only peer" onchange="onAutoSyncToggle()">
+                    <div class="w-10 h-5 bg-slate-300 peer-checked:bg-indigo-600 rounded-full transition"></div>
+                    <div class="absolute left-0.5 top-0.5 w-4 h-4 bg-white rounded-full transition peer-checked:translate-x-5"></div>
+                </label>
+            </div>
+
+            <p class="role-viewer-only hidden text-xs text-amber-700 bg-amber-50 border border-amber-200 rounded-lg p-2.5"><i class="fa-solid fa-circle-info mr-1"></i>Tài khoản khách chỉ có thể xem trạng thái đồng bộ, không thể tải hoặc lưu dữ liệu lên/xuống Cloud.</p>
+
+            <div class="bg-indigo-50 border border-indigo-200 rounded-lg p-3 text-xs text-indigo-800">
+                <p id="sync-status-text"><i class="fa-solid fa-circle-info mr-1"></i>Chưa cấu hình đồng bộ. Dữ liệu chỉ đang lưu tạm trên trình duyệt này.</p>
+            </div>
+
+            <div class="pt-3 flex justify-end gap-2 border-t">
+                <button type="button" onclick="handleSaveSyncConfig()" class="edit-only px-4 py-2 bg-slate-200 text-slate-700 rounded-lg hover:bg-slate-300 font-semibold text-sm">Lưu Cấu Hình</button>
+                <button type="button" onclick="handleManualLoadFromCloud()" class="edit-only px-4 py-2 bg-slate-700 text-white rounded-lg hover:bg-slate-800 font-semibold text-sm"><i class="fa-solid fa-cloud-arrow-down mr-1.5"></i>Tải Từ Cloud</button>
+                <button type="button" onclick="handleManualSaveToCloud()" class="edit-only px-4 py-2 bg-indigo-600 text-white rounded-lg hover:bg-indigo-700 font-semibold text-sm"><i class="fa-solid fa-cloud-arrow-up mr-1.5"></i>Lưu Lên Cloud Ngay</button>
+            </div>
+        </div>
+    </div>
+
+    <!-- MODAL: ADD / EDIT RECORD -->
+    <div id="modal-add" class="fixed inset-0 bg-slate-900/50 backdrop-blur-sm z-50 flex items-center justify-center hidden p-4">
+        <div class="bg-white rounded-xl shadow-xl border border-slate-200 max-w-lg w-full p-6 space-y-4 max-h-[90vh] overflow-y-auto">
+            <div class="flex items-center justify-between border-b pb-3">
+                <h3 id="modal-title" class="text-base font-bold text-slate-800"><i class="fa-solid fa-pen-to-square text-indigo-600 mr-2"></i>Thêm Mới Phiếu Thưởng / Phạt</h3>
+                <button onclick="closeModalAddRecord()" class="text-slate-400 hover:text-slate-600"><i class="fa-solid fa-xmark text-lg"></i></button>
+            </div>
+            <form id="form-add-record" onsubmit="saveRecord(event)" class="space-y-3 text-xs">
+                <div>
+                    <label class="block font-semibold text-slate-700 mb-1">Kỳ Tháng</label>
+                    <select id="form-period" class="w-full bg-slate-50 border border-slate-300 rounded-lg p-2 font-bold text-indigo-900">
+                        <option value="T8.26">T8.26 (Tháng 08/2026)</option>
+                        <option value="T7.26">T7.26 (Tháng 07/2026)</option>
+                        <option value="T6.26">T6.26 (Tháng 06/2026)</option>
+                        <option value="T5.26">T5.26 (Tháng 05/2026)</option>
+                        <option value="T4.26">T4.26 (Tháng 04/2026)</option>
+                        <option value="T3.26">T3.26 (Tháng 03/2026)</option>
+                        <option value="T2.26">T2.26 (Tháng 02/2026)</option>
+                        <option value="T1.26">T1.26 (Tháng 01/2026)</option>
+                        <option value="T12.25">T12.25 (Tháng 12/2025)</option>
+                        <option value="T8.25">T8.25 (Tháng 08/2025)</option>
+                    </select>
+                </div>
+                <div class="grid grid-cols-2 gap-3">
+                    <div class="relative">
+                        <label class="block font-semibold text-slate-700 mb-1">Họ tên nhân viên</label>
+                        <input type="text" id="form-name" required autocomplete="off" placeholder="Nhập họ tên..." oninput="handleNameAutocomplete()" onfocus="handleNameAutocomplete()" class="w-full bg-slate-50 border border-slate-300 rounded-lg p-2">
+                        <div id="name-autocomplete-panel" class="autocomplete-panel hidden"></div>
+                        <p id="name-autofill-hint" class="text-[10px] text-emerald-600 mt-1 hidden"><i class="fa-solid fa-circle-check mr-1"></i>Đã tự động điền theo danh sách CBNV</p>
+                    </div>
+                    <div>
+                        <label class="block font-semibold text-slate-700 mb-1">Đơn vị</label>
+                        <input type="text" id="form-unit" placeholder="VD: VPHN, CNHB..." class="w-full bg-slate-50 border border-slate-300 rounded-lg p-2">
+                    </div>
+                </div>
+                <div class="grid grid-cols-2 gap-3">
+                    <div>
+                        <label class="block font-semibold text-slate-700 mb-1">Phòng ban</label>
+                        <input type="text" id="form-dept" placeholder="VD: HCNS, Kế toán..." class="w-full bg-slate-50 border border-slate-300 rounded-lg p-2">
+                    </div>
+                    <div>
+                        <label class="block font-semibold text-slate-700 mb-1">Loại phiếu</label>
+                        <select id="form-type" class="w-full bg-slate-50 border border-slate-300 rounded-lg p-2 font-semibold">
+                            <option value="Phạt" class="text-red-600">Phạt</option>
+                            <option value="Thưởng" class="text-emerald-600">Thưởng</option>
+                            <option value="Hủy" class="text-slate-500">Hủy</option>
+                        </select>
+                    </div>
+                </div>
+                <div class="grid grid-cols-2 gap-3">
+                    <div>
+                        <label class="block font-semibold text-slate-700 mb-1">Ngày sự vụ</label>
+                        <input type="date" id="form-date" required class="w-full bg-slate-50 border border-slate-300 rounded-lg p-2">
+                    </div>
+                    <div>
+                        <label class="block font-semibold text-slate-700 mb-1">Đơn vị tính</label>
+                        <input type="text" id="form-unitval" value="1 ngày công" class="w-full bg-slate-50 border border-slate-300 rounded-lg p-2">
+                    </div>
+                </div>
+                <div>
+                    <label class="block font-semibold text-slate-700 mb-1">Lý do vi phạm / khen thưởng</label>
+                    <textarea id="form-reason" rows="2" placeholder="Chi tiết lý do..." class="w-full bg-slate-50 border border-slate-300 rounded-lg p-2"></textarea>
+                </div>
+                <div>
+                    <label class="block font-semibold text-slate-700 mb-1">Ghi chú</label>
+                    <input type="text" id="form-note" placeholder="Ghi chú thêm... (VD: lý do hủy phiếu)" class="w-full bg-slate-50 border border-slate-300 rounded-lg p-2">
+                </div>
+                <input type="hidden" id="form-record-id" value="">
+                <div class="pt-3 flex justify-end space-x-2 border-t">
+                    <button type="button" onclick="closeModalAddRecord()" class="px-4 py-2 bg-slate-200 text-slate-700 rounded-lg hover:bg-slate-300 font-semibold">Hủy Bỏ</button>
+                    <button type="submit" id="form-submit-btn" class="px-4 py-2 bg-indigo-600 text-white rounded-lg hover:bg-indigo-700 font-semibold">Lưu Phiếu</button>
+                </div>
+            </form>
+        </div>
+    </div>
+
+    <!-- JAVASCRIPT APPLICATION LOGIC -->
+    <script>
+        // ==================== MASTER DATA ====================
+        let recordIdCounter = 1000;
+
+        // Employee master list (CBNV) - manually maintained, drag & drop orderable
+        let employeeList = [
+            { id: 1,  name: "Đỗ Thị Liên",       unit: "VPHN",       dept: "Kho" },
+            { id: 2,  name: "Nguyễn Thị Liễu",   unit: "VPHN",       dept: "Văn phòng" },
+            { id: 3,  name: "Lương Thị Hòa",     unit: "VPHN",       dept: "HCNS" },
+            { id: 4,  name: "Nguyễn Đắc Dương",  unit: "VPHN",       dept: "HCNS" },
+            { id: 5,  name: "Nguyễn Đức Tùng",   unit: "VPHN",       dept: "HCNS" },
+            { id: 6,  name: "Phạm Thị Lan",      unit: "VPHN",       dept: "Giúp việc" },
+            { id: 7,  name: "Phan Công Phú",     unit: "Vinh - HT",  dept: "Kinh doanh" },
+            { id: 8,  name: "Nguyễn Thị Thủy",   unit: "CNHB",       dept: "PGĐ CN" },
+            { id: 9,  name: "Nguyễn Ngọc Khuê",  unit: "Tuyên Quang",dept: "Kho" },
+            { id: 10, name: "Lê Quang Hòa",      unit: "CNHB",       dept: "PGĐ SX" },
+            { id: 11, name: "Nguyễn Tiến Mạnh",  unit: "CNHB",       dept: "KTV" },
+            { id: 12, name: "Nguyễn Xuân Thắng", unit: "Hưng Yên",   dept: "Kinh doanh" },
+            { id: 13, name: "Đào Thị Hạnh",      unit: "VPHN",       dept: "P.TGĐ" },
+            { id: 14, name: "Dương Quý Thành",   unit: "VPHN",       dept: "KT Thuế" },
+            { id: 15, name: "Phạm Thị Lâm",      unit: "VPHN",       dept: "Marketing" }
+        ];
+        let staffIdCounter = 100;
+
+        // Ma trận Dashboard theo năm được TÍNH TOÁN trực tiếp từ monthlyRecords (xem computeDashboardData)
+        // -> không cần lưu trữ / đồng bộ riêng, tránh lệch dữ liệu giữa Dashboard và Chi tiết Thưởng/Phạt.
+
+        // Monthly detailed records - flat array per period, type field decides which panel it renders in
+        let monthlyRecords = {
+            "T8.26": [
+                { id: recordIdCounter++, name: "Nguyễn Ngọc Khuê", unit: "Tuyên Quang", dept: "Kho", date: "2026-08-03", type: "Phạt", unitVal: "1 ngày công", reason: "Không dọn dẹp kho khu vực xuất hàng", note: "" },
+                { id: recordIdCounter++, name: "Nguyễn Thị Thủy", unit: "CNHB", dept: "PGĐ CN", date: "2026-08-03", type: "Phạt", unitVal: "1 ngày công", reason: "Để máy hỏng, không báo cáo sự vụ cho Chủ tịch", note: "" },
+                { id: recordIdCounter++, name: "Lê Quang Hòa", unit: "CNHB", dept: "PGĐ SX", date: "2026-08-03", type: "Phạt", unitVal: "1 ngày công", reason: "Vi phạm quy định giao tiếp", note: "" },
+                { id: recordIdCounter++, name: "Nguyễn Tiến Mạnh", unit: "CNHB", dept: "KTV", date: "2026-08-03", type: "Phạt", unitVal: "1 ngày công", reason: "Chưa hoàn thiện hồ sơ kỹ thuật đúng hạn", note: "" },
+                { id: recordIdCounter++, name: "Nguyễn Đức Tùng", unit: "VPHN", dept: "HCNS", date: "2026-08-05", type: "Phạt", unitVal: "1 ngày công", reason: "Không chuẩn bị file trình ký cho nhân viên mới", note: "" },
+                { id: recordIdCounter++, name: "Phan Công Phú", unit: "NA - HT", dept: "Kinh doanh", date: "2026-08-10", type: "Phạt", unitVal: "1 ngày công", reason: "Không checkin tại Muối & IBNA", note: "" }
+            ],
+            "T7.26": [
+                { id: recordIdCounter++, name: "Nguyễn Xuân Thắng", unit: "Hưng Yên", dept: "Kinh doanh", date: "2026-07-06", type: "Phạt", unitVal: "1 ngày công", reason: "Đi muộn họp kinh doanh", note: "" },
+                { id: recordIdCounter++, name: "Phan Công Phú", unit: "Vinh - HT", dept: "Kinh doanh", date: "2026-07-06", type: "Phạt", unitVal: "1 ngày công", reason: "Không gửi báo cáo ngày", note: "" },
+                { id: recordIdCounter++, name: "Phạm Thị Lan", unit: "VPHN", dept: "Giúp việc", date: "2026-07-20", type: "Phạt", unitVal: "1 ngày công", reason: "Cắt 2 khóa nước nhà Chủ tịch", note: "" },
+                { id: recordIdCounter++, name: "Đào Thị Hạnh", unit: "VPHN", dept: "P.TGĐ", date: "2026-07-20", type: "Phạt", unitVal: "1 ngày công", reason: "Không chú ý câu từ trong hợp đồng", note: "" }
+            ],
+            "T6.26": [
+                { id: recordIdCounter++, name: "Nguyễn Đức Tùng", unit: "VPHN", dept: "HCNS", date: "2026-06-03", type: "Phạt", unitVal: "1 ngày công", reason: "Để quên sổ ghi chép", note: "" },
+                { id: recordIdCounter++, name: "Dương Quý Thành", unit: "VPHN", dept: "KT Thuế", date: "2026-06-04", type: "Phạt", unitVal: "1 ngày công", reason: "Không khóa tủ phòng KTT cũ", note: "" },
+                { id: recordIdCounter++, name: "Phạm Thị Lâm", unit: "VPHN", dept: "Marketing", date: "2026-06-04", type: "Hủy", unitVal: "Hủy", reason: "Không báo cáo bằng văn bản việc phối hợp in vỏ hộp", note: "Hủy phiếu" }
+            ]
+        };
+
+        let trendChartInstance = null;
+        let deptChartInstance = null;
+        let editingRecordContext = null; // { period, id } when editing an existing record
+        let draggedStaffId = null;
+        let draggedRecordId = null;
+        let entryOrderCounter = 1;
+
+        // Column definitions for the 3 monthly-record tables (shared shape)
+        const monthlyColumns = [
+            { key: "stt",     label: "STT",             width: 46,  align: "center", sortable: false },
+            { key: "name",    label: "Họ và Tên",       width: 150, align: "left",   sortable: true },
+            { key: "unit",    label: "Đơn Vị",          width: 90,  align: "center", sortable: true },
+            { key: "dept",    label: "Phòng Ban",       width: 100, align: "left",   sortable: true },
+            { key: "date",    label: "Ngày Sự Vụ",      width: 100, align: "center", sortable: true },
+            { key: "type",    label: "Phiếu",           width: 75,  align: "center", sortable: false },
+            { key: "unitVal", label: "Đơn Vị Tính",     width: 100, align: "center", sortable: true },
+            { key: "reason",  label: "Lý Do Vi Phạm / Khen Thưởng", width: 260, align: "left", sortable: false },
+            { key: "note",    label: "Ghi Chú",         width: 130, align: "left",   sortable: false },
+            { key: "countP",  label: "Số Lần P",        width: 70,  align: "center", sortable: true },
+            { key: "countT",  label: "Số Lần T",        width: 70,  align: "center", sortable: true },
+            { key: "actions", label: "Thao Tác",        width: 80,  align: "center", sortable: false }
+        ];
+        // Sort state per panel: { key, dir }
+        let sortState = {
+            phat:   { key: 'entryOrder', dir: 1 },
+            thuong: { key: 'entryOrder', dir: 1 }
+        };
+
+        normalizeEntryOrders();
+
+        // ==================== QUẢN LÝ KỲ THÁNG (THÊM KỲ MỚI) ====================
+        function sortPeriodOptions(selectEl) {
+            const currentVal = selectEl.value;
+            const options = Array.from(selectEl.options);
+            options.sort((a, b) => {
+                const pa = parsePeriodKey(a.value), pb = parsePeriodKey(b.value);
+                if (!pa || !pb) return 0;
+                return (pb.year * 12 + pb.month) - (pa.year * 12 + pa.month);
+            });
+            selectEl.innerHTML = '';
+            options.forEach(o => selectEl.appendChild(o));
+            if ([...selectEl.options].some(o => o.value === currentVal)) selectEl.value = currentVal;
+        }
+
+        function ensurePeriodOption(period, label) {
+            ['monthly-period', 'form-period', 'import-period'].forEach(id => {
+                const sel = document.getElementById(id);
+                if (!sel) return;
+                if (![...sel.options].some(o => o.value === period)) {
+                    const opt = document.createElement('option');
+                    opt.value = period;
+                    opt.textContent = label || period;
+                    sel.appendChild(opt);
+                }
+                sortPeriodOptions(sel);
+            });
+        }
+
+        function openModalAddPeriod() {
+            if (guardEdit()) return;
+            const now = new Date();
+            document.getElementById('new-period-month').value = String(now.getMonth() + 1);
+            document.getElementById('new-period-year').value = String(now.getFullYear());
+            document.getElementById('new-period-error').classList.add('hidden');
+            document.getElementById('modal-add-period').classList.remove('hidden');
+        }
+        function closeModalAddPeriod() { document.getElementById('modal-add-period').classList.add('hidden'); }
+
+        function confirmAddPeriod() {
+            if (guardEdit()) return;
+            const month = parseInt(document.getElementById('new-period-month').value, 10);
+            const year = parseInt(document.getElementById('new-period-year').value, 10);
+            const errorEl = document.getElementById('new-period-error');
+            if (!month || !year || year < 2000 || year > 2100) {
+                errorEl.textContent = 'Vui lòng nhập tháng/năm hợp lệ.';
+                errorEl.classList.remove('hidden');
+                return;
+            }
+            const yy = String(year).slice(-2);
+            const period = `T${month}.${yy}`;
+            const existing = [...document.getElementById('monthly-period').options].some(o => o.value === period);
+            if (existing) {
+                errorEl.textContent = 'Kỳ tháng này đã tồn tại trong danh sách.';
+                errorEl.classList.remove('hidden');
+                return;
+            }
+            const label = `Tháng ${String(month).padStart(2, '0')}/${year} (Kỳ ${period})`;
+            if (!monthlyRecords[period]) monthlyRecords[period] = [];
+            ensurePeriodOption(period, label);
+            document.getElementById('monthly-period').value = period;
+            closeModalAddPeriod();
+            updateMonthlyView();
+            updateDashboard();
+            queueCloudSave();
+        }
+
+        // ==================== AUTHENTICATION (bảo mật đăng nhập) ====================
+        const AUTH_USERNAME = "Admin";
+        const AUTH_PASSWORD = "MT2026";
+        const GUEST_USERNAME = "HCNS";
+        const GUEST_PASSWORD = "409tamtrinh";
+        let currentRole = null; // 'admin' | 'viewer'
+
+        function isViewerRole() { return currentRole === 'viewer'; }
+
+        // Chặn mọi thao tác thêm/sửa/xóa/sắp xếp đối với tài khoản khách (lớp bảo vệ thứ 2,
+        // bên cạnh việc đã ẩn nút bấm tương ứng trên giao diện).
+        function guardEdit() {
+            if (isViewerRole()) {
+                alert('Tài khoản khách chỉ có quyền xem, không thể thực hiện thao tác này.');
+                return true;
+            }
+            return false;
+        }
+
+        function handleLogin(e) {
+            e.preventDefault();
+            const u = document.getElementById('login-username').value.trim();
+            const p = document.getElementById('login-password').value;
+            const errorEl = document.getElementById('login-error');
+            let role = null;
+            if (u === AUTH_USERNAME && p === AUTH_PASSWORD) role = 'admin';
+            else if (u === GUEST_USERNAME && p === GUEST_PASSWORD) role = 'viewer';
+
+            if (role) {
+                errorEl.classList.add('hidden');
+                document.getElementById('login-screen').classList.add('hidden');
+                currentRole = role;
+                try {
+                    sessionStorage.setItem('hr_app_logged_in', '1');
+                    sessionStorage.setItem('hr_app_role', role);
+                } catch (err) {}
+                applyRolePermissions();
+            } else {
+                errorEl.classList.remove('hidden');
+                document.getElementById('login-password').value = '';
+                document.getElementById('login-password').focus();
+            }
+        }
+
+        function handleLogout() {
+            try {
+                sessionStorage.removeItem('hr_app_logged_in');
+                sessionStorage.removeItem('hr_app_role');
+            } catch (err) {}
+            currentRole = null;
+            document.getElementById('form-login').reset();
+            document.getElementById('login-error').classList.add('hidden');
+            document.getElementById('login-screen').classList.remove('hidden');
+            document.getElementById('privacy-shield').classList.add('hidden');
+            applyRolePermissions();
+        }
+
+        function checkExistingSession() {
+            try {
+                if (sessionStorage.getItem('hr_app_logged_in') === '1') {
+                    document.getElementById('login-screen').classList.add('hidden');
+                    currentRole = sessionStorage.getItem('hr_app_role') === 'viewer' ? 'viewer' : 'admin';
+                    applyRolePermissions();
+                }
+            } catch (err) {}
+        }
+
+        // Áp dụng/gỡ toàn bộ giới hạn giao diện + bảo mật riêng cho tài khoản khách.
+        function applyRolePermissions() {
+            const viewer = isViewerRole();
+            document.body.classList.toggle('role-viewer', viewer);
+            document.getElementById('role-badge').classList.toggle('hidden', !viewer);
+            // Các nút hành động (sửa/xóa/kéo-thả) được vẽ động trong JS -> render lại để ẩn/hiện đúng theo vai trò.
+            if (typeof renderStaffTable === 'function') renderStaffTable();
+            if (typeof updateMonthlyView === 'function') updateMonthlyView();
+        }
+
+        // ---- Chống copy/paste & mở DevTools cơ bản (chỉ áp dụng khi đăng nhập bằng tài khoản khách) ----
+        ['copy', 'cut', 'paste', 'contextmenu'].forEach(evt => {
+            document.addEventListener(evt, (e) => { if (isViewerRole()) e.preventDefault(); });
+        });
+        document.addEventListener('selectstart', (e) => { if (isViewerRole()) e.preventDefault(); });
+        document.addEventListener('keydown', (e) => {
+            if (!isViewerRole()) return;
+            const k = (e.key || '').toLowerCase();
+            const ctrlOrCmd = e.ctrlKey || e.metaKey;
+            if (ctrlOrCmd && ['c', 'x', 'v', 's', 'p', 'u'].includes(k)) e.preventDefault();
+            if (k === 'f12') e.preventDefault();
+            if (ctrlOrCmd && e.shiftKey && ['i', 'j', 'c'].includes(k)) e.preventDefault(); // DevTools shortcuts
+        });
+
+        // ---- Tự động ẩn nội dung khi tài khoản khách rời trang / chuyển ứng dụng khác ----
+        function showPrivacyShieldIfGuest() {
+            if (!isViewerRole()) return;
+            const loginVisible = !document.getElementById('login-screen').classList.contains('hidden');
+            if (loginVisible) return;
+            document.getElementById('privacy-shield').classList.remove('hidden');
+        }
+        function dismissPrivacyShield() {
+            document.getElementById('privacy-shield').classList.add('hidden');
+        }
+        document.addEventListener('visibilitychange', () => { if (document.hidden) showPrivacyShieldIfGuest(); });
+        window.addEventListener('blur', showPrivacyShieldIfGuest);
+
+        // ==================== ĐỒNG BỘ DỮ LIỆU ONLINE (Google Sheets + Apps Script) ====================
+        const SYNC_URL_KEY = 'hr_app_sync_url';
+        const SYNC_AUTO_KEY = 'hr_app_sync_auto';
+        const LOCAL_CACHE_KEY = 'hr_app_local_cache_v1';
+        let cloudSaveDebounceTimer = null;
+
+        function getSyncUrl() { try { return (localStorage.getItem(SYNC_URL_KEY) || '').trim(); } catch (e) { return ''; } }
+        function isAutoSyncOn() { try { return localStorage.getItem(SYNC_AUTO_KEY) === '1'; } catch (e) { return false; } }
+
+        function openModalSync() {
+            document.getElementById('sync-url').value = getSyncUrl();
+            document.getElementById('sync-autosync').checked = isAutoSyncOn();
+            document.getElementById('modal-sync').classList.remove('hidden');
+        }
+        function closeModalSync() { document.getElementById('modal-sync').classList.add('hidden'); }
+
+        function setSyncStatus(text, level) {
+            const el = document.getElementById('sync-status-text');
+            if (el) el.innerHTML = `<i class="fa-solid fa-circle-info mr-1"></i>${text}`;
+            const dot = document.getElementById('sync-status-dot');
+            if (!dot) return;
+            const colors = { ok: 'bg-emerald-400', error: 'bg-red-500', warn: 'bg-amber-400', info: 'bg-indigo-400', syncing: 'bg-blue-400 animate-pulse' };
+            dot.className = 'absolute top-1 right-1 w-2 h-2 rounded-full ' + (colors[level] || 'bg-slate-500');
+        }
+
+        function updateSyncDot() {
+            const url = getSyncUrl();
+            if (!url) { setSyncStatus('Chưa cấu hình đồng bộ. Dữ liệu chỉ đang lưu tạm trên trình duyệt này.', 'warn'); return; }
+            setSyncStatus('Đã cấu hình đồng bộ. Tự động lưu: ' + (isAutoSyncOn() ? 'BẬT' : 'TẮT') + '.', 'info');
+        }
+
+        function handleSaveSyncConfig() {
+            if (guardEdit()) return;
+            const url = document.getElementById('sync-url').value.trim();
+            try {
+                if (url) localStorage.setItem(SYNC_URL_KEY, url); else localStorage.removeItem(SYNC_URL_KEY);
+            } catch (e) {}
+            updateSyncDot();
+            alert(url ? 'Đã lưu cấu hình đồng bộ.' : 'Đã xóa cấu hình đồng bộ — dữ liệu chỉ lưu tạm trên trình duyệt này.');
+        }
+
+        function onAutoSyncToggle() {
+            if (guardEdit()) return;
+            const on = document.getElementById('sync-autosync').checked;
+            try { localStorage.setItem(SYNC_AUTO_KEY, on ? '1' : '0'); } catch (e) {}
+            updateSyncDot();
+        }
+
+        // Chuyển toàn bộ state hiện tại thành 1 object JSON gọn để lưu/tải.
+        function serializeState() {
+            const employees = employeeList.map(e => ({ id: e.id, name: e.name || '', unit: e.unit || '', dept: e.dept || '' }));
+            const records = [];
+            Object.keys(monthlyRecords).forEach(period => {
+                (monthlyRecords[period] || []).forEach(r => {
+                    records.push({
+                        id: r.id, period, name: r.name || '', unit: r.unit || '', dept: r.dept || '',
+                        date: r.date || '', type: r.type || '', unitVal: r.unitVal || '',
+                        reason: r.reason || '', note: r.note || '', entryOrder: r.entryOrder || 0
+                    });
+                });
+            });
+            return { employees, records };
+        }
+
+        // Nạp dữ liệu (từ Cloud hoặc từ bản lưu tạm) vào toàn bộ ứng dụng, ghi đè dữ liệu hiện tại.
+        function applyState(data) {
+            if (!data) return;
+            if (Array.isArray(data.employees)) {
+                employeeList = data.employees
+                    .map(e => ({ id: Number(e.id) || (staffIdCounter++), name: String(e.name || '').trim(), unit: String(e.unit || '').trim(), dept: String(e.dept || '').trim() }))
+                    .filter(e => e.name);
+                staffIdCounter = Math.max(staffIdCounter, ...employeeList.map(e => Number(e.id) || 0)) + 1;
+            }
+            if (Array.isArray(data.records)) {
+                const grouped = {};
+                data.records.forEach(r => {
+                    const period = String(r.period || '').trim();
+                    if (!period || !r.name) return;
+                    if (!grouped[period]) grouped[period] = [];
+                    grouped[period].push({
+                        id: Number(r.id) || (recordIdCounter++),
+                        name: String(r.name || '').trim(),
+                        unit: String(r.unit || '').trim(),
+                        dept: String(r.dept || '').trim(),
+                        date: String(r.date || '').trim(),
+                        type: String(r.type || 'Phạt').trim(),
+                        unitVal: String(r.unitVal || '').trim(),
+                        reason: String(r.reason || '').trim(),
+                        note: String(r.note || '').trim(),
+                        entryOrder: Number(r.entryOrder) || 0
+                    });
+                });
+                monthlyRecords = grouped;
+                const allIds = Object.values(monthlyRecords).flat().map(r => Number(r.id) || 0);
+                recordIdCounter = Math.max(recordIdCounter, ...allIds) + 1;
+                normalizeEntryOrders();
+            }
+            renderStaffTable();
+            updateMonthlyView();
+            updateDashboard();
+        }
+
+        function saveLocalCache() {
+            try { localStorage.setItem(LOCAL_CACHE_KEY, JSON.stringify(serializeState())); } catch (e) {}
+        }
+
+        function loadLocalCacheIfNoCloud() {
+            if (getSyncUrl()) return false;
+            try {
+                const raw = localStorage.getItem(LOCAL_CACHE_KEY);
+                if (!raw) return false;
+                applyState(JSON.parse(raw));
+                return true;
+            } catch (e) { return false; }
+        }
+
+        async function saveToCloud(silent) {
+            const url = getSyncUrl();
+            saveLocalCache();
+            if (!url) { if (!silent) alert('Vui lòng nhập Apps Script Web App URL trước khi lưu.'); return; }
+            setSyncStatus('Đang lưu lên Cloud...', 'syncing');
+            try {
+                const payload = serializeState();
+                const res = await fetch(url, { method: 'POST', body: JSON.stringify(payload) });
+                const json = await res.json();
+                if (json && json.ok) {
+                    setSyncStatus('Đã lưu lên Cloud lúc ' + new Date().toLocaleTimeString('vi-VN'), 'ok');
+                } else {
+                    throw new Error((json && json.error) || 'Phản hồi không hợp lệ từ Apps Script');
+                }
+            } catch (err) {
+                console.error(err);
+                setSyncStatus('Lỗi khi lưu lên Cloud: ' + err.message + '. Dữ liệu vẫn được giữ tạm trên trình duyệt.', 'error');
+                if (!silent) alert('Không thể lưu lên Cloud. Kiểm tra lại URL Apps Script và quyền truy cập ("Anyone").');
+            }
+        }
+
+        async function loadFromCloud(silent) {
+            const url = getSyncUrl();
+            if (!url) { if (!silent) alert('Vui lòng nhập Apps Script Web App URL trước khi tải.'); return; }
+            setSyncStatus('Đang tải dữ liệu từ Cloud...', 'syncing');
+            try {
+                const res = await fetch(url, { method: 'GET' });
+                const json = await res.json();
+                if (json && json.ok) {
+                    applyState(json);
+                    saveLocalCache();
+                    setSyncStatus('Đã tải dữ liệu mới nhất từ Cloud lúc ' + new Date().toLocaleTimeString('vi-VN'), 'ok');
+                } else {
+                    throw new Error((json && json.error) || 'Phản hồi không hợp lệ từ Apps Script');
+                }
+            } catch (err) {
+                console.error(err);
+                setSyncStatus('Lỗi khi tải từ Cloud: ' + err.message, 'error');
+                if (!silent) alert('Không thể tải dữ liệu từ Cloud. Kiểm tra lại URL Apps Script và kết nối mạng.');
+            }
+        }
+
+        function handleManualLoadFromCloud() {
+            if (guardEdit()) return;
+            if (!confirm('Tải dữ liệu mới nhất từ Cloud sẽ THAY THẾ toàn bộ dữ liệu đang hiển thị trên máy này. Tiếp tục?')) return;
+            loadFromCloud(false);
+        }
+        function handleManualSaveToCloud() { if (guardEdit()) return; saveToCloud(false); }
+
+        // Gọi hàm này sau MỌI thay đổi dữ liệu (thêm/sửa/xóa/kéo-thả) để tự lưu tạm + đồng bộ Cloud (nếu đã bật).
+        function queueCloudSave() {
+            if (isViewerRole()) return;
+            saveLocalCache();
+            if (!getSyncUrl() || !isAutoSyncOn()) return;
+            setSyncStatus('Có thay đổi mới, đang chờ đồng bộ...', 'warn');
+            clearTimeout(cloudSaveDebounceTimer);
+            cloudSaveDebounceTimer = setTimeout(() => saveToCloud(true), 1000);
+        }
+
+        // ==================== INIT ====================
+        window.addEventListener('DOMContentLoaded', () => {
+            checkExistingSession();
+            buildMonthlyTableHeads();
+            initDashboardColumnResize();
+            if (!getSyncUrl()) loadLocalCacheIfNoCloud();
+            updateDashboard();
+            updateMonthlyView();
+            renderStaffTable();
+            updateSyncDot();
+            if (getSyncUrl()) loadFromCloud(true);
+            document.addEventListener('click', (e) => {
+                if (!e.target.closest('#form-name') && !e.target.closest('#name-autocomplete-panel')) {
+                    document.getElementById('name-autocomplete-panel').classList.add('hidden');
+                }
+            });
+        });
+
+        // Căn chỉnh độ rộng cột thủ công cho Bảng Báo Cáo Dashboard (kéo viền phải mỗi cột).
+        // Thead của bảng này là HTML tĩnh (không rebuild), nên chỉ cần khởi tạo 1 lần.
+        function initDashboardColumnResize() {
+            document.querySelectorAll('#table-dashboard .col-resizer').forEach(resizer => {
+                const targetId = resizer.dataset.colTarget;
+                const colEl = document.getElementById(targetId);
+                const th = resizer.closest('th');
+                if (!colEl || !th) return;
+                let startX, startWidth;
+                const onMove = (ev) => {
+                    const delta = ev.clientX - startX;
+                    colEl.style.width = Math.max(18, startWidth + delta) + 'px';
+                };
+                const onUp = () => {
+                    resizer.classList.remove('resizing');
+                    document.removeEventListener('mousemove', onMove);
+                    document.removeEventListener('mouseup', onUp);
+                };
+                resizer.addEventListener('mousedown', (e) => {
+                    e.preventDefault();
+                    e.stopPropagation();
+                    startX = e.clientX;
+                    startWidth = colEl.getBoundingClientRect().width || th.offsetWidth;
+                    resizer.classList.add('resizing');
+                    document.addEventListener('mousemove', onMove);
+                    document.addEventListener('mouseup', onUp);
+                });
+            });
+        }
+
+        // Tab Switching
+        function switchTab(tabName) {
+            document.querySelectorAll('.tab-content').forEach(el => el.classList.add('hidden'));
+            document.querySelectorAll('.tab-btn').forEach(el => {
+                el.classList.remove('bg-indigo-600', 'text-white', 'shadow');
+                el.classList.add('text-slate-300', 'hover:text-white', 'hover:bg-slate-700');
+            });
+
+            document.getElementById(`tab-${tabName}`).classList.remove('hidden');
+            const activeBtn = document.getElementById(`tab-btn-${tabName}`);
+            activeBtn.classList.add('bg-indigo-600', 'text-white', 'shadow');
+            activeBtn.classList.remove('text-slate-300', 'hover:text-white', 'hover:bg-slate-700');
+        }
+
+        // ==================== DASHBOARD LOGIC ====================
+        function parsePeriodKey(period) {
+            const m = String(period || '').trim().match(/^T(\d{1,2})\.(\d{2,4})$/i);
+            if (!m) return null;
+            const month = Number(m[1]);
+            let year = Number(m[2]);
+            if (year < 100) year += 2000;
+            return { month, year };
+        }
+
+        // Trích số ngày công từ chuỗi "Đơn Vị Tính" (VD: "1 ngày công" -> 1, "0.5 ngày công" -> 0.5).
+        // Các giá trị không có số (VD: "Cảnh cáo") được tính là 0 ngày công.
+        function parsePenaltyDays(unitVal) {
+            if (!unitVal) return 0;
+            const m = String(unitVal).match(/(\d+(\.\d+)?)/);
+            return m ? parseFloat(m[1]) : 0;
+        }
+
+        // Gộp toàn bộ phiếu (mọi kỳ) thuộc năm được chọn thành ma trận T1-T12 theo nhân viên.
+        // Phiếu "Hủy" không được tính vào ma trận (đã bị hủy nên không còn hiệu lực).
+        function computeDashboardData(year) {
+            const map = {};
+            Object.keys(monthlyRecords).forEach(period => {
+                const pk = parsePeriodKey(period);
+                if (!pk || pk.year !== Number(year)) return;
+                (monthlyRecords[period] || []).forEach(r => {
+                    if (r.type !== 'Phạt' && r.type !== 'Thưởng') return;
+                    if (!map[r.name]) {
+                        map[r.name] = { name: r.name, unit: r.unit || '', months: {}, totalPenaltyDays: 0 };
+                        for (let i = 1; i <= 12; i++) map[r.name].months['t' + i] = [0, 0];
+                    }
+                    if (r.unit && !map[r.name].unit) map[r.name].unit = r.unit;
+                    const key = 't' + pk.month;
+                    if (!map[r.name].months[key]) map[r.name].months[key] = [0, 0];
+                    if (r.type === 'Phạt') {
+                        map[r.name].months[key][0]++;
+                        map[r.name].totalPenaltyDays += parsePenaltyDays(r.unitVal);
+                    } else {
+                        map[r.name].months[key][1]++;
+                    }
+                });
+            });
+            return Object.values(map);
+        }
+
+        function computeYearTotals(row) {
+            let rowP = 0, rowT = 0;
+            ['t1','t2','t3','t4','t5','t6','t7','t8','t9','t10','t11','t12'].forEach(m => {
+                const [p, t] = row.months[m] || [0, 0];
+                rowP += p; rowT += t;
+            });
+            return { rowP, rowT };
+        }
+
+        function updateDashboard() {
+            const deptFilter = document.getElementById('dash-dept').value;
+            const sortMode = document.getElementById('dash-sort-mode').value; // 'phat' | 'thuong'
+
+            // Đồng bộ danh sách năm từ các kỳ tháng thực tế đang có dữ liệu.
+            const yearSelect = document.getElementById('dash-year');
+            const periodYears = [...new Set(Object.keys(monthlyRecords).map(p => parsePeriodKey(p)).filter(Boolean).map(pk => pk.year))].sort((a, b) => b - a);
+            const yearsToShow = periodYears.length ? periodYears : [new Date().getFullYear()];
+            const currentYearVal = yearSelect.value;
+            yearSelect.innerHTML = yearsToShow.map(y => `<option value="${y}">Năm ${y}</option>`).join('');
+            yearSelect.value = yearsToShow.includes(Number(currentYearVal)) ? currentYearVal : String(yearsToShow[0]);
+
+            const dashboardData = computeDashboardData(yearSelect.value);
+
+            // Đồng bộ danh sách đơn vị từ dữ liệu thực tế.
+            const deptSelect = document.getElementById('dash-dept');
+            const currentDept = deptSelect.value;
+            const units = [...new Set(dashboardData.map(x => x.unit).filter(Boolean))].sort((a,b)=>a.localeCompare(b,'vi'));
+            deptSelect.innerHTML = '<option value="ALL">Tất cả Đơn vị / Phòng ban</option>' +
+                units.map(u => `<option value="${u.replace(/"/g,'&quot;')}">${u}</option>`).join('');
+            deptSelect.value = units.includes(currentDept) || currentDept === 'ALL' ? currentDept : 'ALL';
+
+            let filteredData = dashboardData.filter(item => deptSelect.value === 'ALL' || item.unit === deptSelect.value);
+
+            // Attach computed totals, then sort descending by chosen metric -> Top 10 float to top automatically
+            filteredData = filteredData.map(row => {
+                const { rowP, rowT } = computeYearTotals(row);
+                return { ...row, rowP, rowT };
+            });
+            filteredData.sort((a, b) => sortMode === 'thuong' ? (b.rowT - a.rowT) : (b.rowP - a.rowP));
+
+            let totalPenalties = 0, totalRewards = 0;
+            const tbody = document.getElementById('tbody-dashboard');
+            tbody.innerHTML = '';
+
+            filteredData.forEach((row, idx) => {
+                let monthCellsHTML = '';
+                ['t1','t2','t3','t4','t5','t6','t7','t8','t9','t10','t11','t12'].forEach(m => {
+                    const [p, t] = row.months[m] || [0, 0];
+                    const pClass = p > 0 ? "font-bold text-red-600 bg-red-50" : "text-slate-300";
+                    const tClass = t > 0 ? "font-bold text-emerald-600 bg-emerald-50" : "text-slate-300";
+                    monthCellsHTML += `<td class="border border-slate-200 text-center ${pClass}">${p}</td>`;
+                    monthCellsHTML += `<td class="border border-slate-200 text-center ${tClass}">${t}</td>`;
+                });
+
+                totalPenalties += row.rowP;
+                totalRewards += row.rowT;
+
+                const rank = idx + 1;
+                const isTop10 = rank <= 10;
+                const rankBadge = isTop10
+                    ? `<span class="top10-badge inline-flex items-center justify-center w-6 h-6 rounded-full text-[11px] font-bold"><i class="fa-solid fa-trophy text-[10px] mr-0.5"></i>${rank}</span>`
+                    : `<span class="text-slate-400 font-medium">${rank}</span>`;
+
+                const tr = document.createElement('tr');
+                tr.className = isTop10 ? "hover:bg-amber-50/60 transition bg-amber-50/30" : "hover:bg-slate-50 transition";
+                const penaltyDaysDisplay = Number.isInteger(row.totalPenaltyDays) ? row.totalPenaltyDays : row.totalPenaltyDays.toFixed(1);
+                tr.innerHTML = `
+                    <td class="px-3 py-2 border border-slate-200 text-center">${rankBadge}</td>
+                    <td class="px-4 py-2 border border-slate-200 font-semibold text-slate-800">${row.name}</td>
+                    <td class="px-3 py-2 border border-slate-200 text-center">${row.unit}</td>
+                    ${monthCellsHTML}
+                    <td class="px-3 py-2 border border-slate-200 text-center font-bold text-red-600 bg-red-50">${row.rowP}</td>
+                    <td class="px-3 py-2 border border-slate-200 text-center font-bold text-emerald-600 bg-emerald-50">${row.rowT}</td>
+                    <td class="px-3 py-2 border border-slate-200 text-center font-bold text-indigo-700 bg-indigo-50">${row.rowP + row.rowT}</td>
+                    <td class="px-3 py-2 border border-slate-200 text-center font-bold text-orange-700 bg-orange-50">${penaltyDaysDisplay}</td>
+                `;
+                tbody.appendChild(tr);
+            });
+
+            document.getElementById('kpi-penalty').innerText = totalPenalties;
+            document.getElementById('kpi-reward').innerText = totalRewards;
+            document.getElementById('kpi-users').innerText = filteredData.length;
+            document.getElementById('kpi-net').innerText = (totalRewards - totalPenalties);
+
+            renderCharts(filteredData);
+        }
+
+        function renderCharts(data) {
+            const monthlyP = Array(12).fill(0);
+            const monthlyT = Array(12).fill(0);
+
+            data.forEach(row => {
+                ['t1','t2','t3','t4','t5','t6','t7','t8','t9','t10','t11','t12'].forEach((m, idx) => {
+                    const [p, t] = row.months[m] || [0, 0];
+                    monthlyP[idx] += p;
+                    monthlyT[idx] += t;
+                });
+            });
+
+            if (trendChartInstance) trendChartInstance.destroy();
+            const ctxTrend = document.getElementById('chart-trend').getContext('2d');
+            trendChartInstance = new Chart(ctxTrend, {
+                type: 'bar',
+                data: {
+                    labels: ['T1','T2','T3','T4','T5','T6','T7','T8','T9','T10','T11','T12'],
+                    datasets: [
+                        { label: 'Số lần Phạt', data: monthlyP, backgroundColor: '#ef4444' },
+                        { label: 'Số lần Thưởng', data: monthlyT, backgroundColor: '#10b981' }
+                    ]
+                },
+                options: {
+                    responsive: true,
+                    maintainAspectRatio: false,
+                    plugins: {
+                        legend: { position: 'bottom' },
+                        tooltip: {
+                            callbacks: {
+                                label: function(context) {
+                                    const val = context.parsed.y ?? 0;
+                                    const seriesTotal = (context.dataset.data || []).reduce((a, b) => a + (Number(b) || 0), 0);
+                                    const pct = seriesTotal > 0 ? ((val / seriesTotal) * 100).toFixed(1) : '0.0';
+                                    return `${context.dataset.label}: ${val} phiếu (${pct}%)`;
+                                }
+                            }
+                        }
+                    }
+                }
+            });
+
+            const pieScope = document.getElementById('dash-pie-scope')?.value || 'unit';
+            const pieCounts = {};
+            if (pieScope === 'person') {
+                data.forEach(row => {
+                    if (row.rowP > 0) pieCounts[row.name] = (pieCounts[row.name] || 0) + row.rowP;
+                });
+            } else {
+                data.forEach(row => {
+                    if (row.rowP > 0) pieCounts[row.unit] = (pieCounts[row.unit] || 0) + row.rowP;
+                });
+            }
+
+            if (deptChartInstance) deptChartInstance.destroy();
+            const ctxDept = document.getElementById('chart-dept').getContext('2d');
+            deptChartInstance = new Chart(ctxDept, {
+                type: 'doughnut',
+                data: {
+                    labels: Object.keys(pieCounts),
+                    datasets: [{
+                        data: Object.values(pieCounts),
+                        backgroundColor: ['#6366f1', '#f59e0b', '#10b981', '#ec4899', '#8b5cf6', '#06b6d4', '#f97316', '#84cc16', '#a855f7', '#14b8a6']
+                    }]
+                },
+                options: {
+                    responsive: true,
+                    maintainAspectRatio: false,
+                    plugins: {
+                        legend: { position: 'bottom' },
+                        title: { display: true, text: pieScope === 'person' ? 'Tỷ lệ lỗi theo cá nhân' : 'Tỷ lệ lỗi theo đơn vị' },
+                        tooltip: {
+                            callbacks: {
+                                label: function(context) {
+                                    const val = context.parsed ?? 0;
+                                    const total = (context.dataset.data || []).reduce((a, b) => a + (Number(b) || 0), 0);
+                                    const pct = total > 0 ? ((val / total) * 100).toFixed(1) : '0.0';
+                                    return `${context.label}: ${val} phiếu (${pct}%)`;
+                                }
+                            }
+                        }
+                    }
+                }
+            });
+        }
+
+        // ==================== MONTHLY DETAILED LOGIC ====================
+        function buildMonthlyTableHeads() {
+            ['phat', 'thuong'].forEach(panel => {
+                const row = document.getElementById(`thead-row-${panel}`);
+                row.innerHTML = '';
+                monthlyColumns.forEach(col => {
+                    const th = document.createElement('th');
+                    th.className = `px-3 py-3 border border-slate-200 resizable-th ${col.sortable ? 'sortable-th' : ''}`;
+                    th.style.width = col.width + 'px';
+                    th.style.textAlign = col.align;
+                    th.dataset.key = col.key;
+                    th.dataset.panel = panel;
+                    th.innerHTML = `<span>${col.label}</span>` + (col.sortable ? `<i class="fa-solid fa-sort sort-icon" id="sorticon-${panel}-${col.key}"></i>` : '');
+                    if (col.sortable) {
+                        th.addEventListener('click', (e) => {
+                            if (e.target.classList.contains('col-resizer')) return;
+                            toggleSort(panel, col.key);
+                        });
+                    }
+                    const resizer = document.createElement('div');
+                    resizer.className = 'col-resizer';
+                    attachResizer(resizer, th);
+                    th.appendChild(resizer);
+                    row.appendChild(th);
+                });
+            });
+        }
+
+        function attachResizer(resizer, th) {
+            let startX, startWidth;
+            const onMouseMove = (e) => {
+                const delta = e.clientX - startX;
+                const newWidth = Math.max(40, startWidth + delta);
+                th.style.width = newWidth + 'px';
+            };
+            const onMouseUp = () => {
+                resizer.classList.remove('resizing');
+                document.removeEventListener('mousemove', onMouseMove);
+                document.removeEventListener('mouseup', onMouseUp);
+            };
+            resizer.addEventListener('mousedown', (e) => {
+                e.preventDefault();
+                e.stopPropagation();
+                startX = e.clientX;
+                startWidth = th.offsetWidth;
+                resizer.classList.add('resizing');
+                document.addEventListener('mousemove', onMouseMove);
+                document.addEventListener('mouseup', onMouseUp);
+            });
+        }
+
+        function toggleSort(panel, key) {
+            const st = sortState[panel];
+            if (st.key === key) { st.dir *= -1; } else { st.key = key; st.dir = 1; }
+            // update icons for this panel
+            monthlyColumns.forEach(col => {
+                const icon = document.getElementById(`sorticon-${panel}-${col.key}`);
+                if (!icon) return;
+                icon.className = 'fa-solid sort-icon';
+                if (col.key === key) {
+                    icon.classList.add(st.dir === 1 ? 'fa-sort-up' : 'fa-sort-down', 'active');
+                } else {
+                    icon.classList.add('fa-sort');
+                }
+            });
+            updateMonthlyView();
+        }
+
+        function getPeriodRecords() {
+            const period = document.getElementById('monthly-period').value;
+            return { period, records: monthlyRecords[period] || [] };
+        }
+
+        function updateMonthlyView() {
+            const { period } = getPeriodRecords();
+            document.getElementById('monthly-title').innerText = `DANH SÁCH THƯỞNG / PHẠT KỲ ${period}`;
+            filterMonthlyTable();
+        }
+
+        function filterMonthlyTable() {
+            const query = (document.getElementById('monthly-search').value || '').toLowerCase();
+            const { records } = getPeriodRecords();
+            const filtered = records.filter(r => r.name.toLowerCase().includes(query) || (r.reason && r.reason.toLowerCase().includes(query)));
+            renderAllPanels(filtered);
+        }
+
+        function sortRecords(records, panel) {
+            const st = sortState[panel];
+            const arr = [...records];
+            // Default order is ENTRY order (when the record was added/imported),
+            // deliberately NOT the incident/event date. Manual drag-and-drop sets
+            // the entryOrder values and therefore becomes the persistent order.
+            if (!st || st.key === 'entryOrder' || st.key === 'manual') {
+                return arr.sort((a,b) => (Number(a.entryOrder||0) - Number(b.entryOrder||0)));
+            }
+            arr.sort((a, b) => {
+                let va = a[st.key], vb = b[st.key];
+                if (st.key === 'date') { va = dateSortValue(va); vb = dateSortValue(vb); }
+                else { if (typeof va === 'string') va = va.toLowerCase(); if (typeof vb === 'string') vb = vb.toLowerCase(); }
+                if (va < vb) return -1 * st.dir;
+                if (va > vb) return 1 * st.dir;
+                return (Number(a.entryOrder||0) - Number(b.entryOrder||0));
+            });
+            return arr;
+        }
+
+        function normalizeEntryOrders() {
+            Object.keys(monthlyRecords).forEach(period => {
+                const arr = monthlyRecords[period] || [];
+                arr.forEach((r, idx) => {
+                    if (!Number.isFinite(Number(r.entryOrder))) r.entryOrder = idx + 1;
+                    entryOrderCounter = Math.max(entryOrderCounter, Number(r.entryOrder) + 1);
+                });
+            });
+        }
+
+        function renumberEntryOrders(period) {
+            const arr = monthlyRecords[period] || [];
+            arr.forEach((r, idx) => r.entryOrder = idx + 1);
+            entryOrderCounter = Math.max(entryOrderCounter, arr.length + 1);
+        }
+
+        function attachRecordDragHandlers(tr, period, panel) {
+            tr.draggable = true;
+            tr.dataset.recordId = tr.dataset.recordId || '';
+            tr.addEventListener('dragstart', e => {
+                draggedRecordId = Number(tr.dataset.recordId);
+                tr.classList.add('opacity-50');
+                e.dataTransfer.effectAllowed = 'move';
+                e.dataTransfer.setData('text/plain', String(draggedRecordId));
+            });
+            tr.addEventListener('dragover', e => { e.preventDefault(); tr.classList.add('bg-indigo-50'); });
+            tr.addEventListener('dragleave', () => tr.classList.remove('bg-indigo-50'));
+            tr.addEventListener('drop', e => {
+                e.preventDefault();
+                tr.classList.remove('bg-indigo-50');
+                const targetId = Number(tr.dataset.recordId);
+                if (!draggedRecordId || !targetId || draggedRecordId === targetId) return;
+                const arr = monthlyRecords[period] || [];
+                const from = arr.findIndex(r => Number(r.id) === draggedRecordId);
+                const to = arr.findIndex(r => Number(r.id) === targetId);
+                if (from < 0 || to < 0) return;
+                const [moved] = arr.splice(from, 1);
+                arr.splice(to, 0, moved);
+                renumberEntryOrders(period);
+                // Manual order is now authoritative for this panel.
+                sortState[panel] = { key: 'entryOrder', dir: 1 };
+                updateMonthlyView();
+                queueCloudSave();
+            });
+            tr.addEventListener('dragend', () => {
+                tr.classList.remove('opacity-50','bg-indigo-50');
+                draggedRecordId = null;
+            });
+        }
+
+        function renderAllPanels(records) {
+            // Số lần P / Số lần T computed per employee name across the WHOLE period (not just filtered subset)
+            const { records: allPeriodRecords } = getPeriodRecords();
+            const countMap = {};
+            allPeriodRecords.forEach(r => {
+                if (!countMap[r.name]) countMap[r.name] = { countP: 0, countT: 0 };
+                if (r.type === 'Phạt') countMap[r.name].countP++;
+                if (r.type === 'Thưởng') countMap[r.name].countT++;
+            });
+            const withCounts = records.map(r => ({ ...r, countP: countMap[r.name]?.countP || 0, countT: countMap[r.name]?.countT || 0 }));
+
+            // Gộp chung danh sách Phạt & Hủy vào cùng một bảng (cùng khung sắp xếp/kéo-thả 'phat')
+            const phatHuyRecords = sortRecords(withCounts.filter(r => r.type === 'Phạt' || r.type === 'Hủy'), 'phat');
+            const thuongRecords  = sortRecords(withCounts.filter(r => r.type === 'Thưởng'), 'thuong');
+
+            renderPanel('tbody-phat', phatHuyRecords, 'bg-red-100 text-red-700');
+            renderPanel('tbody-thuong', thuongRecords, 'bg-emerald-100 text-emerald-700');
+
+            const phatCount = phatHuyRecords.filter(r => r.type === 'Phạt').length;
+            const huyCount = phatHuyRecords.filter(r => r.type === 'Hủy').length;
+            document.getElementById('badge-count-phat').innerText = `Phạt: ${phatCount}`;
+            document.getElementById('badge-count-huy').innerText = `Hủy: ${huyCount}`;
+            document.getElementById('badge-count-thuong').innerText = `Thưởng: ${thuongRecords.length}`;
+        }
+
+        function formatDateVN(value) {
+            if (!value) return '';
+            const d = parseFlexibleDate(value);
+            if (!d || Number.isNaN(d.getTime())) return String(value);
+            return `${String(d.getDate()).padStart(2,'0')}/${String(d.getMonth()+1).padStart(2,'0')}/${d.getFullYear()}`;
+        }
+
+        function parseFlexibleDate(value) {
+            if (value instanceof Date) return new Date(value.getTime());
+            if (typeof value === 'number') {
+                const utc = new Date(Date.UTC(1899, 11, 30) + value * 86400000);
+                return new Date(utc.getUTCFullYear(), utc.getUTCMonth(), utc.getUTCDate());
+            }
+            const raw = String(value ?? '').trim();
+            if (!raw) return null;
+            let m = raw.match(/^(\d{1,2})[\/\-.](\d{1,2})[\/\-.](\d{4})$/);
+            if (m) return new Date(Number(m[3]), Number(m[2])-1, Number(m[1]));
+            m = raw.match(/^(\d{4})[\/\-.](\d{1,2})[\/\-.](\d{1,2})$/);
+            if (m) return new Date(Number(m[1]), Number(m[2])-1, Number(m[3]));
+            const d = new Date(raw);
+            return Number.isNaN(d.getTime()) ? null : d;
+        }
+
+        function dateSortValue(value) {
+            const d = parseFlexibleDate(value);
+            return d ? d.getTime() : Number.POSITIVE_INFINITY;
+        }
+
+        function renderPanel(tbodyId, records, badgeClass) {
+            const tbody = document.getElementById(tbodyId);
+            tbody.innerHTML = '';
+            const { period } = getPeriodRecords();
+
+            if (records.length === 0) {
+                tbody.innerHTML = `<tr><td colspan="${monthlyColumns.length}" class="text-center py-6 text-slate-400">Không có dữ liệu cho kỳ này</td></tr>`;
+                return;
+            }
+
+            const panel = tbodyId.replace('tbody-', '');
+            const typeBadgeClass = { 'Phạt': 'bg-red-100 text-red-700', 'Thưởng': 'bg-emerald-100 text-emerald-700', 'Hủy': 'bg-slate-200 text-slate-600' };
+            const viewer = isViewerRole();
+
+            records.forEach((r, idx) => {
+                const tr = document.createElement('tr');
+                tr.className = viewer ? "hover:bg-slate-50 transition" : "hover:bg-slate-50 transition cursor-move";
+                tr.dataset.recordId = r.id;
+                tr.innerHTML = `
+                    <td class="px-3 py-2.5 border border-slate-200 text-center font-medium">${idx + 1}</td>
+                    <td class="px-4 py-2.5 border border-slate-200 font-bold text-slate-800 truncate">${r.name}</td>
+                    <td class="px-3 py-2.5 border border-slate-200 text-center">${r.unit}</td>
+                    <td class="px-3 py-2.5 border border-slate-200">${r.dept || '—'}</td>
+                    <td class="px-3 py-2.5 border border-slate-200 text-center font-mono">${formatDateVN(r.date)}</td>
+                    <td class="px-3 py-2.5 border border-slate-200 text-center">
+                        <span class="px-2 py-0.5 rounded-full text-[11px] font-semibold ${typeBadgeClass[r.type] || 'bg-slate-100 text-slate-600'}">${r.type || ''}</span>
+                    </td>
+                    <td class="px-3 py-2.5 border border-slate-200 text-center">${r.unitVal}</td>
+                    <td class="px-4 py-2.5 border border-slate-200">${r.reason || '—'}</td>
+                    <td class="px-3 py-2.5 border border-slate-200 text-slate-500">${r.note || '—'}</td>
+                    <td class="px-3 py-2.5 border border-slate-200 text-center font-semibold text-red-600">${r.countP}</td>
+                    <td class="px-3 py-2.5 border border-slate-200 text-center font-semibold text-emerald-600">${r.countT}</td>
+                    <td class="px-3 py-2.5 border border-slate-200 text-center whitespace-nowrap">
+                        ${viewer ? '<span class="text-slate-300"><i class="fa-solid fa-lock"></i></span>' : `
+                        <button onclick="openEditRecord('${period}', ${r.id})" title="Cập nhật trạng thái / Chỉnh sửa" class="text-indigo-500 hover:text-indigo-700 p-1"><i class="fa-solid fa-pen"></i></button>
+                        <button onclick="deleteRecord('${r.id}')" title="Xóa phiếu" class="text-red-500 hover:text-red-700 p-1"><i class="fa-solid fa-trash-can"></i></button>`}
+                    </td>
+                `;
+                tbody.appendChild(tr);
+                if (!viewer) attachRecordDragHandlers(tr, period, panel);
+            });
+        }
+
+        // ==================== ADD / EDIT RECORD MODAL ====================
+        function openModalAddRecord() {
+            if (guardEdit()) return;
+            editingRecordContext = null;
+            document.getElementById('form-add-record').reset();
+            document.getElementById('form-record-id').value = '';
+            document.getElementById('form-unitval').value = '1 ngày công';
+            document.getElementById('form-period').value = document.getElementById('monthly-period').value;
+            document.getElementById('modal-title').innerHTML = '<i class="fa-solid fa-pen-to-square text-indigo-600 mr-2"></i>Thêm Mới Phiếu Thưởng / Phạt';
+            document.getElementById('form-submit-btn').innerText = 'Lưu Phiếu';
+            document.getElementById('name-autofill-hint').classList.add('hidden');
+            document.getElementById('modal-add').classList.remove('hidden');
+        }
+
+        function openEditRecord(period, id) {
+            if (guardEdit()) return;
+            const records = monthlyRecords[period] || [];
+            const rec = records.find(r => r.id == id);
+            if (!rec) return;
+            editingRecordContext = { period, id: rec.id };
+
+            document.getElementById('form-period').value = period;
+            document.getElementById('form-name').value = rec.name;
+            document.getElementById('form-unit').value = rec.unit;
+            document.getElementById('form-dept').value = rec.dept || '';
+            document.getElementById('form-type').value = rec.type;
+            document.getElementById('form-date').value = rec.date;
+            document.getElementById('form-unitval').value = rec.unitVal;
+            document.getElementById('form-reason').value = rec.reason || '';
+            document.getElementById('form-note').value = rec.note || '';
+            document.getElementById('form-record-id').value = rec.id;
+
+            document.getElementById('modal-title').innerHTML = '<i class="fa-solid fa-rotate text-amber-600 mr-2"></i>Cập Nhật / Chỉnh Sửa Trạng Thái Phiếu';
+            document.getElementById('form-submit-btn').innerText = 'Cập Nhật Phiếu';
+            document.getElementById('name-autofill-hint').classList.add('hidden');
+            document.getElementById('modal-add').classList.remove('hidden');
+        }
+
+        function closeModalAddRecord() {
+            document.getElementById('modal-add').classList.add('hidden');
+            document.getElementById('name-autocomplete-panel').classList.add('hidden');
+            editingRecordContext = null;
+        }
+
+        function saveRecord(e) {
+            e.preventDefault();
+            if (guardEdit()) return;
+            const period = document.getElementById('form-period').value;
+            const type = document.getElementById('form-type').value;
+
+            if (editingRecordContext) {
+                // Editing existing record - may switch type (e.g. Phạt -> Hủy) and/or move period
+                const oldPeriod = editingRecordContext.period;
+                const oldRecords = monthlyRecords[oldPeriod] || [];
+                const idx = oldRecords.findIndex(r => r.id == editingRecordContext.id);
+                if (idx === -1) return;
+                const updated = {
+                    id: editingRecordContext.id,
+                    name: document.getElementById('form-name').value,
+                    unit: document.getElementById('form-unit').value,
+                    dept: document.getElementById('form-dept').value || "Văn phòng",
+                    date: document.getElementById('form-date').value,
+                    type: type,
+                    unitVal: document.getElementById('form-unitval').value,
+                    reason: document.getElementById('form-reason').value,
+                    note: document.getElementById('form-note').value,
+                    entryOrder: entryOrderCounter++
+                };
+
+                if (period !== oldPeriod) {
+                    oldRecords.splice(idx, 1);
+                    if (!monthlyRecords[period]) monthlyRecords[period] = [];
+                    monthlyRecords[period].push(updated);
+                } else {
+                    oldRecords[idx] = updated;
+                }
+                closeModalAddRecord();
+                document.getElementById('monthly-period').value = period;
+                updateMonthlyView();
+                queueCloudSave();
+                alert("Cập nhật trạng thái phiếu thành công!");
+                return;
+            }
+
+            const newRecord = {
+                id: recordIdCounter++,
+                name: document.getElementById('form-name').value,
+                unit: document.getElementById('form-unit').value,
+                dept: document.getElementById('form-dept').value || "Văn phòng",
+                date: document.getElementById('form-date').value,
+                type: type,
+                unitVal: document.getElementById('form-unitval').value,
+                reason: document.getElementById('form-reason').value,
+                note: document.getElementById('form-note').value,
+                entryOrder: entryOrderCounter++
+            };
+
+            if (!monthlyRecords[period]) monthlyRecords[period] = [];
+            monthlyRecords[period].push(newRecord);
+
+            closeModalAddRecord();
+            document.getElementById('monthly-period').value = period;
+            updateMonthlyView();
+            queueCloudSave();
+            alert("Thêm mới phiếu thành công!");
+        }
+
+        function deleteRecord(id) {
+            if (guardEdit()) return;
+            const { period } = getPeriodRecords();
+            const records = monthlyRecords[period] || [];
+            const idx = records.findIndex(r => r.id == id);
+            if (idx === -1) return;
+            if (confirm(`Bạn có chắc chắn muốn xóa phiếu của ${records[idx].name}?`)) {
+                records.splice(idx, 1);
+                updateMonthlyView();
+                queueCloudSave();
+            }
+        }
+
+        // ==================== NAME AUTOCOMPLETE (linked to Danh sách CBNV) ====================
+        function handleNameAutocomplete() {
+            const input = document.getElementById('form-name');
+            const value = input.value.trim();
+            const panel = document.getElementById('name-autocomplete-panel');
+            const hint = document.getElementById('name-autofill-hint');
+            hint.classList.add('hidden');
+
+            if (!value) { panel.classList.add('hidden'); return; }
+
+            const partialMatches = employeeList.filter(e => e.name.toLowerCase().includes(value.toLowerCase()));
+            const exactMatches = employeeList.filter(e => e.name.toLowerCase() === value.toLowerCase());
+
+            if (exactMatches.length === 1) {
+                // Single exact match -> auto-fill immediately
+                document.getElementById('form-unit').value = exactMatches[0].unit;
+                document.getElementById('form-dept').value = exactMatches[0].dept;
+                hint.classList.remove('hidden');
+            }
+
+            if (partialMatches.length > 0 && document.activeElement === input) {
+                panel.innerHTML = partialMatches.slice(0, 8).map(e => `
+                    <div class="autocomplete-item" onclick="selectAutocompleteEmployee(${e.id})">
+                        <span class="font-semibold text-slate-800">${e.name}</span>
+                        <span class="text-slate-400"> — ${e.unit || '—'} / ${e.dept || '—'}</span>
+                    </div>
+                `).join('') + (exactMatches.length > 1 ? `<div class="px-2 py-1 text-[10px] text-amber-600 bg-amber-50">Có ${exactMatches.length} nhân viên trùng tên — chọn đúng người hoặc tự điền Đơn vị/Phòng ban thủ công.</div>` : '');
+                panel.classList.remove('hidden');
+            } else {
+                panel.classList.add('hidden');
+            }
+        }
+
+        function selectAutocompleteEmployee(empId) {
+            const emp = employeeList.find(e => e.id === empId);
+            if (!emp) return;
+            document.getElementById('form-name').value = emp.name;
+            document.getElementById('form-unit').value = emp.unit;
+            document.getElementById('form-dept').value = emp.dept;
+            document.getElementById('name-autocomplete-panel').classList.add('hidden');
+            document.getElementById('name-autofill-hint').classList.remove('hidden');
+        }
+
+        // ==================== DANH SÁCH CBNV (STAFF) LOGIC ====================
+        function addEmployee(e) {
+            e.preventDefault();
+            if (guardEdit()) return;
+            const name = document.getElementById('staff-name').value.trim();
+            const unit = document.getElementById('staff-unit').value.trim();
+            const dept = document.getElementById('staff-dept').value.trim();
+            if (!name) return;
+
+            employeeList.push({ id: staffIdCounter++, name, unit, dept });
+            document.getElementById('form-add-staff').reset();
+            renderStaffTable();
+            queueCloudSave();
+        }
+
+        function deleteEmployee(id) {
+            if (guardEdit()) return;
+            const emp = employeeList.find(e => e.id === id);
+            if (!emp) return;
+            if (confirm(`Xóa nhân viên "${emp.name}" khỏi danh sách CBNV?`)) {
+                employeeList = employeeList.filter(e => e.id !== id);
+                renderStaffTable();
+                queueCloudSave();
+            }
+        }
+
+        function renderStaffTable() {
+            const query = (document.getElementById('staff-search')?.value || '').toLowerCase();
+            const tbody = document.getElementById('tbody-staff');
+            tbody.innerHTML = '';
+
+            const visibleList = query
+                ? employeeList.filter(e => e.name.toLowerCase().includes(query) || (e.unit || '').toLowerCase().includes(query) || (e.dept || '').toLowerCase().includes(query))
+                : employeeList;
+
+            if (visibleList.length === 0) {
+                tbody.innerHTML = `<tr><td colspan="5" class="text-center py-6 text-slate-400">Chưa có nhân viên nào trong danh sách</td></tr>`;
+                return;
+            }
+
+            visibleList.forEach((emp, idx) => {
+                const tr = document.createElement('tr');
+                const viewer = isViewerRole();
+                tr.className = viewer ? "hover:bg-slate-50 transition" : "hover:bg-slate-50 transition drag-row";
+                tr.draggable = !viewer;
+                tr.dataset.id = emp.id;
+                if (!viewer) {
+                    tr.addEventListener('dragstart', onStaffDragStart);
+                    tr.addEventListener('dragover', onStaffDragOver);
+                    tr.addEventListener('dragleave', onStaffDragLeave);
+                    tr.addEventListener('drop', onStaffDrop);
+                    tr.addEventListener('dragend', onStaffDragEnd);
+                }
+                tr.innerHTML = `
+                    <td class="px-3 py-2.5 border border-slate-200 text-center font-medium">
+                        ${viewer ? '' : '<i class="fa-solid fa-grip-vertical drag-handle mr-1"></i>'}${idx + 1}
+                    </td>
+                    <td class="px-4 py-2.5 border border-slate-200 font-bold text-slate-800">${emp.name}</td>
+                    <td class="px-3 py-2.5 border border-slate-200 text-center">${emp.unit || '—'}</td>
+                    <td class="px-3 py-2.5 border border-slate-200 text-center">${emp.dept || '—'}</td>
+                    <td class="px-3 py-2.5 border border-slate-200 text-center">
+                        ${viewer ? '<span class="text-slate-300"><i class="fa-solid fa-lock"></i></span>' : `<button onclick="deleteEmployee(${emp.id})" title="Xóa nhân viên" class="text-red-500 hover:text-red-700 p-1"><i class="fa-solid fa-trash-can"></i></button>`}
+                    </td>
+                `;
+                tbody.appendChild(tr);
+            });
+        }
+
+        function onStaffDragStart(e) {
+            draggedStaffId = Number(e.currentTarget.dataset.id);
+            e.currentTarget.classList.add('dragging');
+            e.dataTransfer.effectAllowed = 'move';
+        }
+        function onStaffDragOver(e) {
+            e.preventDefault();
+            e.currentTarget.classList.add('drag-over');
+        }
+        function onStaffDragLeave(e) {
+            e.currentTarget.classList.remove('drag-over');
+        }
+        function onStaffDrop(e) {
+            e.preventDefault();
+            const targetId = Number(e.currentTarget.dataset.id);
+            e.currentTarget.classList.remove('drag-over');
+            if (draggedStaffId === null || draggedStaffId === targetId) return;
+
+            const fromIdx = employeeList.findIndex(x => x.id === draggedStaffId);
+            const toIdx = employeeList.findIndex(x => x.id === targetId);
+            if (fromIdx === -1 || toIdx === -1) return;
+
+            const [moved] = employeeList.splice(fromIdx, 1);
+            employeeList.splice(toIdx, 0, moved);
+            renderStaffTable();
+            queueCloudSave();
+        }
+        function onStaffDragEnd(e) {
+            e.currentTarget.classList.remove('dragging');
+            document.querySelectorAll('.drag-row').forEach(r => r.classList.remove('drag-over'));
+            draggedStaffId = null;
+        }
+
+        // ==================== EXPORT EXCEL & CSV (SheetJS) ====================
+        function exportDashboard(format) {
+            if (guardEdit()) return;
+            const year = document.getElementById('dash-year').value;
+            const deptVal = document.getElementById('dash-dept').value;
+            const sortMode = document.getElementById('dash-sort-mode').value;
+
+            let data = computeDashboardData(year).filter(x => deptVal === 'ALL' || x.unit === deptVal);
+            data = data.map(row => ({ ...row, ...computeYearTotals(row) }));
+            data.sort((a, b) => sortMode === 'thuong' ? (b.rowT - a.rowT) : (b.rowP - a.rowP));
+
+            const months = ['T1','T2','T3','T4','T5','T6','T7','T8','T9','T10','T11','T12'];
+            const headerRow1 = ['Hạng', 'Họ Tên', 'Đơn Vị', `THÁNG - ${year}`, ...Array(23).fill(''), 'Tổng Phạt', 'Tổng Thưởng', 'Tổng T/P', 'Tổng Ngày Công Phạt'];
+            const headerRow2 = ['', '', '', ...months.flatMap(m => [m, '']), '', '', '', ''];
+            const headerRow3 = ['', '', '', ...Array(24).fill(0).map((_, i) => i % 2 === 0 ? 'P' : 'T'), '', '', '', ''];
+
+            const dataRows = data.map((row, idx) => {
+                const line = [idx + 1, row.name, row.unit];
+                for (let i = 1; i <= 12; i++) { const [p, t] = row.months['t' + i] || [0, 0]; line.push(p, t); }
+                const days = Number.isInteger(row.totalPenaltyDays) ? row.totalPenaltyDays : Number((row.totalPenaltyDays || 0).toFixed(1));
+                line.push(row.rowP, row.rowT, row.rowP + row.rowT, days);
+                return line;
+            });
+
+            if (format === 'csv') {
+                const esc = v => `"${String(v ?? '').replace(/"/g, '""')}"`;
+                const flatHeaders = ['Hạng','Họ Tên','Đơn Vị', ...months.flatMap(m => [m+' P', m+' T']), 'Tổng Phạt','Tổng Thưởng','Tổng T/P','Tổng Ngày Công Phạt'];
+                let csv = '\uFEFF' + esc(`BÁO CÁO TỔNG SỐ LỖI VI PHẠM & KHEN THƯỞNG NHÂN VIÊN - NĂM ${year}`) + '\n';
+                csv += flatHeaders.map(esc).join(',') + '\n';
+                dataRows.forEach(line => { csv += line.map(esc).join(',') + '\n'; });
+                const blob = new Blob([csv], { type: 'text/csv;charset=utf-8' });
+                const url = URL.createObjectURL(blob);
+                const a = document.createElement('a');
+                a.href = url; a.download = `Bao_Cao_Tong_Hop_Loi_Phat_${year}.csv`;
+                document.body.appendChild(a); a.click(); document.body.removeChild(a);
+                URL.revokeObjectURL(url);
+                return;
+            }
+
+            const aoa = [
+                [`BÁO CÁO TỔNG SỐ LỖI VI PHẠM & KHEN THƯỞNG NHÂN VIÊN - NĂM ${year}`],
+                headerRow1, headerRow2, headerRow3, ...dataRows
+            ];
+            const ws = XLSX.utils.aoa_to_sheet(aoa);
+            const totalCols = 31;
+            const endCol = totalCols - 1;
+            const endRow = aoa.length - 1;
+
+            ws['!merges'] = [
+                { s:{r:0,c:0}, e:{r:0,c:endCol} },
+                { s:{r:1,c:0}, e:{r:3,c:0} }, { s:{r:1,c:1}, e:{r:3,c:1} }, { s:{r:1,c:2}, e:{r:3,c:2} },
+                { s:{r:1,c:3}, e:{r:1,c:26} },
+                { s:{r:1,c:27}, e:{r:3,c:27} }, { s:{r:1,c:28}, e:{r:3,c:28} },
+                { s:{r:1,c:29}, e:{r:3,c:29} }, { s:{r:1,c:30}, e:{r:3,c:30} }
+            ];
+            for (let i = 0; i < 12; i++) { const c = 3 + i * 2; ws['!merges'].push({ s:{r:2,c}, e:{r:2,c:c+1} }); }
+
+            applyExportStyle(ws, { s:{r:0,c:0}, e:{r:endRow,c:endCol} }, [6, 22, 12, ...Array(24).fill(6), 10, 12, 10, 14]);
+            ws['A1'].s = { font:{name:'Times New Roman',sz:15,bold:true}, alignment:{horizontal:'center',vertical:'center'} };
+            ws['!rows'][0] = { hpt: 30 };
+            styleHeaderRow(ws, 1, endCol);
+            styleHeaderRow(ws, 2, endCol);
+            styleHeaderRow(ws, 3, endCol);
+
+            // Tô màu các cột "Tổng" khớp màu trên giao diện (đỏ/xanh lá/tím/cam).
+            const colColors = { 27: 'FEE2E2', 28: 'D1FAE5', 29: 'E0E7FF', 30: 'FFEDD5' };
+            const colFonts = { 27: '991B1B', 28: '065F46', 29: '3730A3', 30: '9A3412' };
+            for (let r = 4; r <= endRow; r++) {
+                Object.keys(colColors).forEach(cKey => {
+                    const c = Number(cKey);
+                    const addr = XLSX.utils.encode_cell({ r, c });
+                    if (!ws[addr]) ws[addr] = { v: '' };
+                    ws[addr].s = {
+                        font: { name: 'Times New Roman', sz: 11, bold: true, color: { rgb: colFonts[c] } },
+                        alignment: { horizontal: 'center', vertical: 'center' },
+                        fill: { fgColor: { rgb: colColors[c] } },
+                        border: { top:{style:'thin',color:{rgb:'CBD5E1'}}, bottom:{style:'thin',color:{rgb:'CBD5E1'}}, left:{style:'thin',color:{rgb:'CBD5E1'}}, right:{style:'thin',color:{rgb:'CBD5E1'}} }
+                    };
+                });
+                // Nổi bật Top 10 giống giao diện web (nền vàng nhạt).
+                if (r - 4 < 10) {
+                    for (let c = 0; c <= 2; c++) {
+                        const addr = XLSX.utils.encode_cell({ r, c });
+                        if (!ws[addr]) ws[addr] = { v: '' };
+                        ws[addr].s = {
+                            font: { name: 'Times New Roman', sz: 11, bold: c !== 2 },
+                            alignment: { horizontal: c === 0 ? 'center' : 'left', vertical: 'center' },
+                            fill: { fgColor: { rgb: 'FEF9E7' } },
+                            border: { top:{style:'thin',color:{rgb:'CBD5E1'}}, bottom:{style:'thin',color:{rgb:'CBD5E1'}}, left:{style:'thin',color:{rgb:'CBD5E1'}}, right:{style:'thin',color:{rgb:'CBD5E1'}} }
+                        };
+                    }
+                }
+            }
+
+            const wb = XLSX.utils.book_new();
+            XLSX.utils.book_append_sheet(wb, ws, `TỔNG_${year}`);
+            XLSX.writeFile(wb, `Bao_Cao_Tong_Hop_Loi_Phat_${year}.xlsx`);
+        }
+
+        // ==================== IMPORT EXCEL / CSV (FLEXIBLE HEADER DETECTION) ====================
+        function normalizeHeader(v) {
+            return String(v ?? '').normalize('NFD').replace(/[\u0300-\u036f]/g, '')
+                .toLowerCase().replace(/đ/g, 'd').replace(/[^a-z0-9]/g, '');
+        }
+
+        function findHeaderMap(row) {
+            const aliases = {
+                name: ['hoten','hovaten','tennhanvien','nhanvien','ten','employee','employeename','fullname'],
+                unit: ['donvi','donvicongtac','bophan','unit','departmentunit','congty','chinhanh'],
+                dept: ['phongban','phong','ban','dept','department'],
+                date: ['ngaysuv','ngaysuvu','ngay','ngayphat','ngaythuong','date','incidentdate'],
+                type: ['loaiphieu','loaivi','loaithuongphat','type','hinhthuc','trangthai','loi'],
+                unitVal: ['donvitinh','giatri','mucphat','mucthuong','unitvalue','value'],
+                reason: ['lydo','lydovipham','lydothuong','noidung','noidungvipham','reason','content'],
+                note: ['ghichu','ghich','note','remark','remarks'],
+                period: ['kythang','ky','thang','period','month','monthperiod']
+            };
+            const map = {};
+            Object.keys(aliases).forEach(key => {
+                const idx = row.findIndex(cell => aliases[key].includes(normalizeHeader(cell)));
+                if (idx >= 0) map[key] = idx;
+            });
+            return map;
+        }
+
+        function inferType(value) {
+            const t = String(value ?? '').trim().toLowerCase();
+            if (t.includes('thưởng') || t.includes('thuong') || t.includes('reward') || t === 't') return 'Thưởng';
+            if (t.includes('hủy') || t.includes('huy') || t.includes('cancel')) return 'Hủy';
+            return 'Phạt';
+        }
+
+        function inferPeriod(dateValue, explicitPeriod) {
+            const p = String(explicitPeriod ?? '').trim();
+            if (p) {
+                const normalized = p.replace(/\\s+/g,'').replace(/^T/i,'');
+                const m = normalized.match(/^(\\d{1,2})[.\\/-]?(\\d{2,4})$/);
+                if (m) return `T${Number(m[1])}.${String(m[2]).slice(-2)}`;
+            }
+            const d = parseFlexibleDate(dateValue);
+            if (!d) return document.getElementById('monthly-period').value;
+            return `T${d.getMonth()+1}.${String(d.getFullYear()).slice(-2)}`;
+        }
+
+        function makeImportedRecord(row, map, sheetName) {
+            const get = key => map[key] !== undefined ? row[map[key]] : '';
+            const date = get('date');
+            const name = String(get('name') ?? '').trim();
+            if (!name) return null;
+            return {
+                id: recordIdCounter++,
+                name,
+                unit: String(get('unit') ?? '').trim(),
+                dept: String(get('dept') ?? '').trim() || 'Văn phòng',
+                date: (() => { const d = parseFlexibleDate(date); return d ? `${d.getFullYear()}-${String(d.getMonth()+1).padStart(2,'0')}-${String(d.getDate()).padStart(2,'0')}` : String(date ?? '').trim(); })(),
+                type: inferType(get('type') || sheetName),
+                unitVal: String(get('unitVal') ?? '').trim() || (inferType(get('type') || sheetName) === 'Hủy' ? 'Hủy' : '1 ngày công'),
+                reason: String(get('reason') ?? '').trim(),
+                note: String(get('note') ?? '').trim(),
+                entryOrder: entryOrderCounter++
+            };
+        }
+
+        function importMonthlyExcel(event) {
+            if (guardEdit()) { event.target.value = ''; return; }
+            const file = event.target.files?.[0];
+            if (!file) return;
+            const reader = new FileReader();
+            reader.onload = e => {
+                try {
+                    const wb = XLSX.read(e.target.result, { type: 'array', cellDates: true });
+                    let imported = 0, skipped = 0;
+                    wb.SheetNames.forEach(sheetName => {
+                        const ws = wb.Sheets[sheetName];
+                        const rows = XLSX.utils.sheet_to_json(ws, { header: 1, defval: '', raw: true });
+                        if (!rows.length) return;
+
+                        // Search the first 15 rows for the most likely header row.
+                        let best = null;
+                        rows.slice(0, 15).forEach((row, idx) => {
+                            const map = findHeaderMap(row);
+                            const score = Object.keys(map).length;
+                            if (!best || score > best.score) best = { idx, map, score };
+                        });
+                        if (!best || !best.map.name || !best.map.date || best.score < 2) {
+                            skipped += Math.max(0, rows.length - 1);
+                            return;
+                        }
+
+                        rows.slice(best.idx + 1).forEach(row => {
+                            if (!row.some(v => String(v ?? '').trim())) return;
+                            const rec = makeImportedRecord(row, best.map, sheetName);
+                            if (!rec) { skipped++; return; }
+                            const period = inferPeriod(rec.date, best.map.period !== undefined ? row[best.map.period] : '');
+                            if (!monthlyRecords[period]) monthlyRecords[period] = [];
+                            // Prevent obvious duplicate imports.
+                            const duplicate = monthlyRecords[period].some(x =>
+                                x.name === rec.name && x.date === rec.date && x.type === rec.type &&
+                                x.reason === rec.reason && x.unit === rec.unit
+                            );
+                            if (!duplicate) {
+                                monthlyRecords[period].push(rec);
+                                imported++;
+                            }
+                        });
+                    });
+
+                    // Refresh all views and employee master from imported names where possible.
+                    Object.values(monthlyRecords).flat().forEach(r => {
+                        if (!r.name) return;
+                        if (!employeeList.some(e => e.name.toLowerCase() === r.name.toLowerCase())) {
+                            employeeList.push({ id: staffIdCounter++, name: r.name, unit: r.unit || '', dept: r.dept || '' });
+                        }
+                    });
+                    renderStaffTable();
+                    updateMonthlyView();
+                    updateDashboard();
+                    queueCloudSave();
+                    alert(`Nhập dữ liệu thành công: ${imported} phiếu mới.${skipped ? `\\nBỏ qua/không nhận diện được: ${skipped} dòng.` : ''}`);
+                } catch (err) {
+                    console.error(err);
+                    alert('Không thể đọc file. Hãy kiểm tra file Excel/CSV và thử lại.');
+                } finally {
+                    event.target.value = '';
+                }
+            };
+            reader.readAsArrayBuffer(file);
+        }
+
+        // ==================== EXPORT EXCEL & CSV ====================
+        function applyExportStyle(ws, range, widths) {
+            const border = { style: 'thin', color: { rgb: 'B7C3D0' } };
+            for (let r = range.s.r; r <= range.e.r; r++) {
+                for (let c = range.s.c; c <= range.e.c; c++) {
+                    const addr = XLSX.utils.encode_cell({ r, c });
+                    if (!ws[addr]) ws[addr] = { v: '' };
+                    ws[addr].s = {
+                        font: { name: 'Times New Roman', sz: 11 },
+                        alignment: { vertical: 'center', wrapText: true },
+                        border: { top: border, bottom: border, left: border, right: border }
+                    };
+                }
+            }
+            if (widths) ws['!cols'] = widths.map(w => ({ wch: w }));
+            ws['!rows'] = Array.from({ length: range.e.r - range.s.r + 1 }, () => ({ hpt: 20 }));
+        }
+
+        function styleHeaderRow(ws, rowNumber, endCol) {
+            for (let c = 0; c <= endCol; c++) {
+                const addr = XLSX.utils.encode_cell({ r: rowNumber, c });
+                if (!ws[addr]) ws[addr] = { v: '' };
+                ws[addr].s = {
+                    font: { name: 'Times New Roman', sz: 11, bold: true },
+                    alignment: { horizontal: 'center', vertical: 'center', wrapText: true },
+                    fill: { fgColor: { rgb: 'E2E8F0' } },
+                    border: { top: { style:'thin', color:{rgb:'94A3B8'} }, bottom:{style:'thin',color:{rgb:'94A3B8'}}, left:{style:'thin',color:{rgb:'94A3B8'}}, right:{style:'thin',color:{rgb:'94A3B8'}} }
+                };
+            }
+        }
+
+        // Cột export khớp 100% với monthlyColumns hiển thị trên giao diện (bỏ cột "Thao Tác" vì không áp dụng cho file tĩnh).
+        const EXPORT_COLUMN_WIDTHS = [7, 24, 14, 16, 13, 12, 16, 44, 26, 10, 10];
+
+        // Xuất TOÀN BỘ 3 loại phiếu (Phạt/Thưởng/Hủy) vào CÙNG 1 SHEET duy nhất, xếp thành 3 khối liên tiếp.
+        // Không tô màu nền ô, chữ giữ nguyên màu đen — chỉ dùng đậm/cỡ chữ/khung viền để phân biệt.
+        function buildMonthlyExportSheet(period, phatRecords, thuongRecords, huyRecords, totalLine) {
+            const headers = monthlyColumns.filter(c => c.key !== 'actions').map(c => c.label);
+            const endCol = headers.length - 1;
+            const toRow = r => [r.stt, r.name, r.unit || '', r.dept || '', formatDateVN(r.date), r.type || '', r.unitVal || '', r.reason || '', r.note || '', r.countP || 0, r.countT || 0];
+
+            const aoa = [[`DANH SÁCH THƯỞNG / PHẠT KỲ ${period}`], []];
+            const sectionMeta = [];
+
+            function addSection(title, records) {
+                const titleRow = aoa.length;
+                aoa.push([title]);
+                const headerRow = aoa.length;
+                aoa.push(headers);
+                const dataStart = aoa.length;
+                records.forEach((r, idx) => aoa.push(toRow({ ...r, stt: idx + 1 })));
+                const dataEnd = aoa.length - 1;
+                aoa.push([]);
+                sectionMeta.push({ titleRow, headerRow, dataStart, dataEnd });
+            }
+
+            addSection(`PHIẾU PHẠT (${phatRecords.length})`, phatRecords);
+            addSection(`PHIẾU THƯỞNG (${thuongRecords.length})`, thuongRecords);
+            addSection(`PHIẾU HỦY (${huyRecords.length})`, huyRecords);
+
+            const totalRow = aoa.length;
+            aoa.push([totalLine]);
+
+            const ws = XLSX.utils.aoa_to_sheet(aoa);
+            const endRow = aoa.length - 1;
+
+            ws['!merges'] = [{ s:{r:0,c:0}, e:{r:0,c:endCol} }];
+            sectionMeta.forEach(m => ws['!merges'].push({ s:{r:m.titleRow,c:0}, e:{r:m.titleRow,c:endCol} }));
+            ws['!merges'].push({ s:{r:totalRow,c:0}, e:{r:totalRow,c:endCol} });
+
+            const BLACK = '000000';
+            const thinGray = { style: 'thin', color: { rgb: 'D0D0D0' } };
+            const thinBlack = { style: 'thin', color: { rgb: BLACK } };
+
+            // Nền trắng, chữ đen cho toàn bộ vùng dữ liệu trước, sau đó style riêng từng phần.
+            for (let r = 0; r <= endRow; r++) {
+                for (let c = 0; c <= endCol; c++) {
+                    const addr = XLSX.utils.encode_cell({ r, c });
+                    if (!ws[addr]) ws[addr] = { v: '' };
+                }
+            }
+
+            ws['A1'].s = { font:{ name:'Times New Roman', sz:15, bold:true, color:{rgb:BLACK} }, alignment:{ horizontal:'center', vertical:'center' } };
+
+            sectionMeta.forEach(m => {
+                ws[XLSX.utils.encode_cell({ r:m.titleRow, c:0 })].s = {
+                    font: { name:'Times New Roman', sz:13, bold:true, color:{rgb:BLACK} },
+                    alignment: { horizontal:'left', vertical:'center' }
+                };
+                for (let c = 0; c <= endCol; c++) {
+                    const addr = XLSX.utils.encode_cell({ r: m.headerRow, c });
+                    ws[addr].s = {
+                        font: { name:'Times New Roman', sz:11, bold:true, color:{rgb:BLACK} },
+                        alignment: { horizontal:'center', vertical:'center', wrapText:true },
+                        border: { top:thinBlack, bottom:thinBlack, left:thinBlack, right:thinBlack }
+                    };
+                }
+                for (let r = m.dataStart; r <= m.dataEnd; r++) {
+                    for (let c = 0; c <= endCol; c++) {
+                        const addr = XLSX.utils.encode_cell({ r, c });
+                        ws[addr].s = {
+                            font: { name:'Times New Roman', sz:11, color:{rgb:BLACK} },
+                            alignment: { vertical:'center', wrapText:true, horizontal: (c === 0 || c === 5 || c === 9 || c === 10) ? 'center' : 'left' },
+                            border: { top:thinGray, bottom:thinGray, left:thinGray, right:thinGray }
+                        };
+                    }
+                }
+            });
+
+            // Dòng tổng kết cuối cùng — cỡ chữ to hơn để làm nổi bật, chữ đen, không tô màu nền.
+            ws[XLSX.utils.encode_cell({ r: totalRow, c: 0 })].s = {
+                font: { name:'Times New Roman', sz:16, bold:true, color:{rgb:BLACK} },
+                alignment: { horizontal:'center', vertical:'center' },
+                border: { top:{style:'medium',color:{rgb:BLACK}}, bottom:{style:'medium',color:{rgb:BLACK}}, left:{style:'medium',color:{rgb:BLACK}}, right:{style:'medium',color:{rgb:BLACK}} }
+            };
+
+            ws['!cols'] = EXPORT_COLUMN_WIDTHS.map(w => ({ wch: w }));
+            ws['!rows'] = Array.from({ length: endRow + 1 }, (_, i) => {
+                if (i === 0) return { hpt: 28 };
+                if (i === totalRow) return { hpt: 30 };
+                if (sectionMeta.some(m => m.titleRow === i)) return { hpt: 22 };
+                return { hpt: 20 };
+            });
+
+            return ws;
+        }
+
+        function exportMonthly(format) {
+            if (guardEdit()) return;
+            const period = document.getElementById('monthly-period').value;
+            const { records: allRecords } = getPeriodRecords();
+            const all = allRecords.map(r => ({ ...r }));
+
+            const countMap = {};
+            all.forEach(r => {
+                if (!countMap[r.name]) countMap[r.name] = { countP: 0, countT: 0 };
+                if (r.type === 'Phạt') countMap[r.name].countP++;
+                if (r.type === 'Thưởng') countMap[r.name].countT++;
+            });
+            const withCounts = all.map(r => ({ ...r, countP: countMap[r.name]?.countP || 0, countT: countMap[r.name]?.countT || 0 }));
+
+            // Y HỆT thứ tự hiển thị trên giao diện (khung Phạt&Hủy dùng sortState 'phat', khung Thưởng dùng sortState 'thuong').
+            const phatRecords   = sortRecords(withCounts.filter(r => r.type === 'Phạt'), 'phat');
+            const thuongRecords = sortRecords(withCounts.filter(r => r.type === 'Thưởng'), 'thuong');
+            const huyRecords    = sortRecords(withCounts.filter(r => r.type === 'Hủy'), 'phat');
+
+            const totalAll = phatRecords.length + thuongRecords.length + huyRecords.length;
+            const totalLine = `TỔNG ${totalAll} PHIẾU GỒM: ${phatRecords.length} PHẠT + ${thuongRecords.length} THƯỞNG + ${huyRecords.length} HỦY`;
+            const headers = monthlyColumns.filter(c => c.key !== 'actions').map(c => c.label);
+
+            if (format === 'csv') {
+                const esc = v => `"${String(v ?? '').replace(/"/g, '""')}"`;
+                let csv = '\uFEFF' + esc(`DANH SÁCH THƯỞNG / PHẠT KỲ ${period}`) + '\n\n';
+                const writeSection = (title, records) => {
+                    csv += esc(title) + '\n';
+                    csv += headers.map(esc).join(',') + '\n';
+                    records.forEach((r, idx) => {
+                        csv += [idx+1, r.name, r.unit||'', r.dept||'', formatDateVN(r.date), r.type||'', r.unitVal||'', r.reason||'', r.note||'', r.countP||0, r.countT||0].map(esc).join(',') + '\n';
+                    });
+                    csv += '\n';
+                };
+                writeSection(`PHIẾU PHẠT (${phatRecords.length})`, phatRecords);
+                writeSection(`PHIẾU THƯỞNG (${thuongRecords.length})`, thuongRecords);
+                writeSection(`PHIẾU HỦY (${huyRecords.length})`, huyRecords);
+                csv += esc(totalLine) + '\n';
+
+                const blob = new Blob([csv], { type: 'text/csv;charset=utf-8' });
+                const url = URL.createObjectURL(blob);
+                const a = document.createElement('a');
+                a.href = url; a.download = `Danh_Sach_Thuong_Phat_${period}.csv`;
+                document.body.appendChild(a); a.click(); document.body.removeChild(a);
+                URL.revokeObjectURL(url);
+                return;
+            }
+
+            const ws = buildMonthlyExportSheet(period, phatRecords, thuongRecords, huyRecords, totalLine);
+            const wb = XLSX.utils.book_new();
+            XLSX.utils.book_append_sheet(wb, ws, 'Thuong-Phat-Huy');
+            XLSX.writeFile(wb, `Danh_Sach_Thuong_Phat_${period}.xlsx`);
+        }
+    </script>
+</body>
+</html>
