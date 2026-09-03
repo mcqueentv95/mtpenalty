@@ -254,7 +254,10 @@
                 <div class="p-4 bg-slate-50 border-b border-slate-200 flex items-center justify-between flex-wrap gap-3">
                     <div>
                         <h3 class="text-base font-bold text-slate-800"><i class="fa-solid fa-table-cells mr-2 text-indigo-600"></i> Bảng Báo Cáo Tổng Số Lỗi Vi Phạm & Khen Thưởng Nhân Viên</h3>
-                        <span class="text-xs text-slate-500">Top 10 được ưu tiên hiển thị ở đầu bảng; cuộn xuống để xem tiếp toàn bộ nhân viên. Kéo viền phải mỗi cột để căn chỉnh độ rộng.</span>
+                        <div class="relative mt-1 max-w-xs">
+                            <input type="text" id="dash-name-search" oninput="updateDashboard()" placeholder="Tìm tên CBNV vi phạm/khen thưởng..." class="w-full bg-white border border-slate-300 text-slate-800 text-xs rounded-lg pl-8 pr-3 py-1.5 focus:ring-indigo-500 focus:border-indigo-500">
+                            <i class="fa-solid fa-magnifying-glass absolute left-2.5 top-2 text-slate-400 text-xs"></i>
+                        </div>
                     </div>
                     <div class="flex items-center gap-2">
                         <label class="text-xs font-semibold text-slate-600 whitespace-nowrap"><i class="fa-solid fa-ranking-star text-amber-500 mr-1"></i>Xếp hạng Top 10 theo:</label>
@@ -284,7 +287,7 @@
                             <col id="dashcol-25" style="width:22px"><col id="dashcol-26" style="width:22px">
                             <col id="dashcol-27" style="width:75px">
                             <col id="dashcol-28" style="width:80px">
-                            <col id="dashcol-29" style="width:70px">
+                            <col id="dashcol-29" style="width:110px">
                             <col id="dashcol-30" style="width:110px">
                         </colgroup>
                         <thead class="bg-slate-100 text-slate-700 uppercase text-[11px] font-bold sticky top-0 z-10 shadow-sm">
@@ -295,7 +298,7 @@
                                 <th colspan="24" class="px-3 py-1 border border-slate-300 text-center bg-indigo-50 text-indigo-900">THÁNG - 2026</th>
                                 <th rowspan="3" class="px-3 py-2 border border-slate-300 text-center bg-red-100 text-red-800 resizable-th">Tổng Phạt<div class="col-resizer" data-col-target="dashcol-27"></div></th>
                                 <th rowspan="3" class="px-3 py-2 border border-slate-300 text-center bg-emerald-100 text-emerald-800 resizable-th">Tổng Thưởng<div class="col-resizer" data-col-target="dashcol-28"></div></th>
-                                <th rowspan="3" class="px-3 py-2 border border-slate-300 text-center bg-indigo-100 text-indigo-800 resizable-th">Tổng T/P<div class="col-resizer" data-col-target="dashcol-29"></div></th>
+                                <th rowspan="3" class="px-3 py-2 border border-slate-300 text-center bg-violet-100 text-violet-800 resizable-th">Tổng $P Ngoài NC<div class="col-resizer" data-col-target="dashcol-29"></div></th>
                                 <th rowspan="3" class="px-3 py-2 border border-slate-300 text-center bg-orange-100 text-orange-800 resizable-th">Tổng Ngày Công Phạt<div class="col-resizer" data-col-target="dashcol-30"></div></th>
                             </tr>
                             <tr class="bg-indigo-50/50">
@@ -607,7 +610,8 @@
                     </div>
                     <div>
                         <label class="block font-semibold text-slate-700 mb-1">Đơn vị tính</label>
-                        <input type="text" id="form-unitval" value="1 ngày công" class="w-full bg-slate-50 border border-slate-300 rounded-lg p-2">
+                        <input type="text" id="form-unitval" value="1 ngày công" onblur="handleUnitValBlur(event)" placeholder="VD: 1 ngày công hoặc 1000000" class="w-full bg-slate-50 border border-slate-300 rounded-lg p-2">
+                        <p class="text-[10px] text-slate-400 mt-1">Nhập toàn số (VD: 1000000) sẽ tự động định dạng thành số tiền (1.000.000).</p>
                     </div>
                 </div>
                 <div>
@@ -1073,7 +1077,16 @@
 
         // Căn chỉnh độ rộng cột thủ công cho Bảng Báo Cáo Dashboard (kéo viền phải mỗi cột).
         // Thead của bảng này là HTML tĩnh (không rebuild), nên chỉ cần khởi tạo 1 lần.
+        function applyDashboardSavedWidths() {
+            const saved = (loadColumnWidths().dashboard) || {};
+            Object.keys(saved).forEach(colId => {
+                const el = document.getElementById(colId);
+                if (el) el.style.width = saved[colId] + 'px';
+            });
+        }
+
         function initDashboardColumnResize() {
+            applyDashboardSavedWidths();
             document.querySelectorAll('#table-dashboard .col-resizer').forEach(resizer => {
                 const targetId = resizer.dataset.colTarget;
                 const colEl = document.getElementById(targetId);
@@ -1088,6 +1101,7 @@
                     resizer.classList.remove('resizing');
                     document.removeEventListener('mousemove', onMove);
                     document.removeEventListener('mouseup', onUp);
+                    saveColumnWidth('dashboard', targetId, parseInt(colEl.style.width, 10));
                 };
                 resizer.addEventListener('mousedown', (e) => {
                     e.preventDefault();
@@ -1126,11 +1140,38 @@
         }
 
         // Trích số ngày công từ chuỗi "Đơn Vị Tính" (VD: "1 ngày công" -> 1, "0.5 ngày công" -> 0.5).
-        // Các giá trị không có số (VD: "Cảnh cáo") được tính là 0 ngày công.
+        // Nếu giá trị là số tiền thuần (VD: "1.000.000") thì KHÔNG tính là ngày công (trả về 0) —
+        // xem parseCurrencyPenaltyAmount() để lấy số tiền tương ứng.
         function parsePenaltyDays(unitVal) {
-            if (!unitVal) return 0;
-            const m = String(unitVal).match(/(\d+(\.\d+)?)/);
+            const s = String(unitVal || '').trim();
+            if (!s) return 0;
+            if (/^[\d.]+$/.test(s)) return 0; // toàn bộ là số + dấu chấm -> số tiền, không phải ngày công
+            const m = s.match(/(\d+(\.\d+)?)/);
             return m ? parseFloat(m[1]) : 0;
+        }
+
+        // Nhận diện & trích số tiền khi "Đơn Vị Tính" là số thuần (đã được auto-format dạng 1.000.000).
+        function parseCurrencyPenaltyAmount(unitVal) {
+            const s = String(unitVal || '').trim();
+            if (!/^[\d.]+$/.test(s)) return 0;
+            const digits = s.replace(/\./g, '');
+            return digits ? parseInt(digits, 10) : 0;
+        }
+
+        // Định dạng số tiền kiểu Việt Nam: 1000000 -> "1.000.000"
+        function formatCurrencyVN(amount) {
+            const n = Math.round(Number(amount) || 0);
+            return n.toLocaleString('vi-VN');
+        }
+
+        // Tự động nhận diện & định dạng "Đơn Vị Tính" thành số tiền nếu người dùng nhập toàn số.
+        function handleUnitValBlur(e) {
+            const input = e.target;
+            const raw = input.value.trim();
+            const stripped = raw.replace(/\./g, '');
+            if (/^\d+$/.test(stripped) && stripped.length > 0) {
+                input.value = formatCurrencyVN(stripped);
+            }
         }
 
         // Gộp toàn bộ phiếu (mọi kỳ) thuộc năm được chọn thành ma trận T1-T12 theo nhân viên.
@@ -1143,7 +1184,7 @@
                 (monthlyRecords[period] || []).forEach(r => {
                     if (r.type !== 'Phạt' && r.type !== 'Thưởng') return;
                     if (!map[r.name]) {
-                        map[r.name] = { name: r.name, unit: r.unit || '', months: {}, totalPenaltyDays: 0 };
+                        map[r.name] = { name: r.name, unit: r.unit || '', months: {}, totalPenaltyDays: 0, totalPenaltyMoney: 0 };
                         for (let i = 1; i <= 12; i++) map[r.name].months['t' + i] = [0, 0];
                     }
                     if (r.unit && !map[r.name].unit) map[r.name].unit = r.unit;
@@ -1152,6 +1193,7 @@
                     if (r.type === 'Phạt') {
                         map[r.name].months[key][0]++;
                         map[r.name].totalPenaltyDays += parsePenaltyDays(r.unitVal);
+                        map[r.name].totalPenaltyMoney += parseCurrencyPenaltyAmount(r.unitVal);
                     } else {
                         map[r.name].months[key][1]++;
                     }
@@ -1193,6 +1235,14 @@
 
             let filteredData = dashboardData.filter(item => deptSelect.value === 'ALL' || item.unit === deptSelect.value);
 
+            // Lọc theo tên CBNV tìm kiếm (không phân biệt hoa/thường, có/không dấu).
+            const searchRaw = (document.getElementById('dash-name-search')?.value || '').trim();
+            if (searchRaw) {
+                const norm = s => String(s || '').normalize('NFD').replace(/[\u0300-\u036f]/g, '').replace(/đ/gi, 'd').toLowerCase();
+                const q = norm(searchRaw);
+                filteredData = filteredData.filter(item => norm(item.name).includes(q));
+            }
+
             // Attach computed totals, then sort descending by chosen metric -> Top 10 float to top automatically
             filteredData = filteredData.map(row => {
                 const { rowP, rowT } = computeYearTotals(row);
@@ -1203,6 +1253,10 @@
             let totalPenalties = 0, totalRewards = 0;
             const tbody = document.getElementById('tbody-dashboard');
             tbody.innerHTML = '';
+
+            if (filteredData.length === 0) {
+                tbody.innerHTML = `<tr><td colspan="31" class="text-center py-8 text-slate-400">Không tìm thấy nhân viên phù hợp</td></tr>`;
+            }
 
             filteredData.forEach((row, idx) => {
                 let monthCellsHTML = '';
@@ -1226,6 +1280,7 @@
                 const tr = document.createElement('tr');
                 tr.className = isTop10 ? "hover:bg-amber-50/60 transition bg-amber-50/30" : "hover:bg-slate-50 transition";
                 const penaltyDaysDisplay = Number.isInteger(row.totalPenaltyDays) ? row.totalPenaltyDays : row.totalPenaltyDays.toFixed(1);
+                const penaltyMoneyDisplay = row.totalPenaltyMoney > 0 ? formatCurrencyVN(row.totalPenaltyMoney) : '—';
                 tr.innerHTML = `
                     <td class="px-3 py-2 border border-slate-200 text-center">${rankBadge}</td>
                     <td class="px-4 py-2 border border-slate-200 font-semibold text-slate-800">${row.name}</td>
@@ -1233,7 +1288,7 @@
                     ${monthCellsHTML}
                     <td class="px-3 py-2 border border-slate-200 text-center font-bold text-red-600 bg-red-50">${row.rowP}</td>
                     <td class="px-3 py-2 border border-slate-200 text-center font-bold text-emerald-600 bg-emerald-50">${row.rowT}</td>
-                    <td class="px-3 py-2 border border-slate-200 text-center font-bold text-indigo-700 bg-indigo-50">${row.rowP + row.rowT}</td>
+                    <td class="px-3 py-2 border border-slate-200 text-center font-bold text-violet-700 bg-violet-50">${penaltyMoneyDisplay}</td>
                     <td class="px-3 py-2 border border-slate-200 text-center font-bold text-orange-700 bg-orange-50">${penaltyDaysDisplay}</td>
                 `;
                 tbody.appendChild(tr);
@@ -1334,14 +1389,30 @@
         }
 
         // ==================== MONTHLY DETAILED LOGIC ====================
+        // ==================== LƯU ĐỘ RỘNG CỘT (localStorage) — áp dụng cho phiên làm việc sau ====================
+        const COLUMN_WIDTH_STORAGE_KEY = 'hr_app_column_widths_v1';
+        function loadColumnWidths() {
+            try { return JSON.parse(localStorage.getItem(COLUMN_WIDTH_STORAGE_KEY) || '{}'); } catch (e) { return {}; }
+        }
+        function saveColumnWidth(scope, key, width) {
+            try {
+                const all = loadColumnWidths();
+                if (!all[scope]) all[scope] = {};
+                all[scope][key] = width;
+                localStorage.setItem(COLUMN_WIDTH_STORAGE_KEY, JSON.stringify(all));
+            } catch (e) {}
+        }
+
         function buildMonthlyTableHeads() {
+            const savedWidths = loadColumnWidths();
             ['phat', 'thuong'].forEach(panel => {
                 const row = document.getElementById(`thead-row-${panel}`);
                 row.innerHTML = '';
                 monthlyColumns.forEach(col => {
                     const th = document.createElement('th');
                     th.className = `px-3 py-3 border border-slate-200 resizable-th ${col.sortable ? 'sortable-th' : ''}`;
-                    th.style.width = col.width + 'px';
+                    const savedW = savedWidths[panel] && savedWidths[panel][col.key];
+                    th.style.width = (savedW || col.width) + 'px';
                     th.style.textAlign = col.align;
                     th.dataset.key = col.key;
                     th.dataset.panel = panel;
@@ -1354,14 +1425,14 @@
                     }
                     const resizer = document.createElement('div');
                     resizer.className = 'col-resizer';
-                    attachResizer(resizer, th);
+                    attachResizer(resizer, th, panel, col.key);
                     th.appendChild(resizer);
                     row.appendChild(th);
                 });
             });
         }
 
-        function attachResizer(resizer, th) {
+        function attachResizer(resizer, th, scope, key) {
             let startX, startWidth;
             const onMouseMove = (e) => {
                 const delta = e.clientX - startX;
@@ -1372,6 +1443,7 @@
                 resizer.classList.remove('resizing');
                 document.removeEventListener('mousemove', onMouseMove);
                 document.removeEventListener('mouseup', onMouseUp);
+                if (scope && key) saveColumnWidth(scope, key, parseInt(th.style.width, 10));
             };
             resizer.addEventListener('mousedown', (e) => {
                 e.preventDefault();
@@ -1561,20 +1633,20 @@
                 tr.className = viewer ? "hover:bg-slate-50 transition" : "hover:bg-slate-50 transition cursor-move";
                 tr.dataset.recordId = r.id;
                 tr.innerHTML = `
-                    <td class="px-3 py-2.5 border border-slate-200 text-center font-medium">${idx + 1}</td>
-                    <td class="px-4 py-2.5 border border-slate-200 font-bold text-slate-800 truncate">${r.name}</td>
-                    <td class="px-3 py-2.5 border border-slate-200 text-center">${r.unit}</td>
-                    <td class="px-3 py-2.5 border border-slate-200">${r.dept || '—'}</td>
-                    <td class="px-3 py-2.5 border border-slate-200 text-center font-mono">${formatDateVN(r.date)}</td>
-                    <td class="px-3 py-2.5 border border-slate-200 text-center">
+                    <td class="px-3 py-2.5 border border-slate-200 text-center align-middle font-medium">${idx + 1}</td>
+                    <td class="px-4 py-2.5 border border-slate-200 align-middle break-words font-bold text-slate-800">${r.name}</td>
+                    <td class="px-3 py-2.5 border border-slate-200 text-center align-middle break-words">${r.unit}</td>
+                    <td class="px-3 py-2.5 border border-slate-200 align-middle break-words">${r.dept || '—'}</td>
+                    <td class="px-3 py-2.5 border border-slate-200 text-center align-middle font-mono">${formatDateVN(r.date)}</td>
+                    <td class="px-3 py-2.5 border border-slate-200 text-center align-middle">
                         <span class="px-2 py-0.5 rounded-full text-[11px] font-semibold ${typeBadgeClass[r.type] || 'bg-slate-100 text-slate-600'}">${r.type || ''}</span>
                     </td>
-                    <td class="px-3 py-2.5 border border-slate-200 text-center">${r.unitVal}</td>
-                    <td class="px-4 py-2.5 border border-slate-200">${r.reason || '—'}</td>
-                    <td class="px-3 py-2.5 border border-slate-200 text-slate-500">${r.note || '—'}</td>
-                    <td class="px-3 py-2.5 border border-slate-200 text-center font-semibold text-red-600">${r.countP}</td>
-                    <td class="px-3 py-2.5 border border-slate-200 text-center font-semibold text-emerald-600">${r.countT}</td>
-                    <td class="px-3 py-2.5 border border-slate-200 text-center whitespace-nowrap">
+                    <td class="px-3 py-2.5 border border-slate-200 text-center align-middle break-words">${r.unitVal}</td>
+                    <td class="px-4 py-2.5 border border-slate-200 align-middle break-words">${r.reason || '—'}</td>
+                    <td class="px-3 py-2.5 border border-slate-200 align-middle break-words text-slate-500">${r.note || '—'}</td>
+                    <td class="px-3 py-2.5 border border-slate-200 text-center align-middle font-semibold text-red-600">${r.countP}</td>
+                    <td class="px-3 py-2.5 border border-slate-200 text-center align-middle font-semibold text-emerald-600">${r.countT}</td>
+                    <td class="px-3 py-2.5 border border-slate-200 text-center align-middle whitespace-nowrap">
                         ${viewer ? '<span class="text-slate-300"><i class="fa-solid fa-lock"></i></span>' : `
                         <button onclick="openEditRecord('${period}', ${r.id})" title="Cập nhật trạng thái / Chỉnh sửa" class="text-indigo-500 hover:text-indigo-700 p-1"><i class="fa-solid fa-pen"></i></button>
                         <button onclick="deleteRecord('${r.id}')" title="Xóa phiếu" class="text-red-500 hover:text-red-700 p-1"><i class="fa-solid fa-trash-can"></i></button>`}
@@ -1629,6 +1701,17 @@
             editingRecordContext = null;
         }
 
+        // Tự động thêm nhân viên vào "Danh sách CBNV" nếu tên chưa tồn tại khi tạo/sửa phiếu.
+        function ensureEmployeeExists(name, unit, dept) {
+            const trimmedName = String(name || '').trim();
+            if (!trimmedName) return;
+            const exists = employeeList.some(e => e.name.trim().toLowerCase() === trimmedName.toLowerCase());
+            if (!exists) {
+                employeeList.push({ id: staffIdCounter++, name: trimmedName, unit: String(unit || '').trim(), dept: String(dept || '').trim() });
+                renderStaffTable();
+            }
+        }
+
         function saveRecord(e) {
             e.preventDefault();
             if (guardEdit()) return;
@@ -1653,6 +1736,7 @@
                     note: document.getElementById('form-note').value,
                     entryOrder: entryOrderCounter++
                 };
+                ensureEmployeeExists(updated.name, updated.unit, updated.dept);
 
                 if (period !== oldPeriod) {
                     oldRecords.splice(idx, 1);
@@ -1681,6 +1765,7 @@
                 note: document.getElementById('form-note').value,
                 entryOrder: entryOrderCounter++
             };
+            ensureEmployeeExists(newRecord.name, newRecord.unit, newRecord.dept);
 
             if (!monthlyRecords[period]) monthlyRecords[period] = [];
             monthlyRecords[period].push(newRecord);
@@ -1861,7 +1946,7 @@
             data.sort((a, b) => sortMode === 'thuong' ? (b.rowT - a.rowT) : (b.rowP - a.rowP));
 
             const months = ['T1','T2','T3','T4','T5','T6','T7','T8','T9','T10','T11','T12'];
-            const headerRow1 = ['Hạng', 'Họ Tên', 'Đơn Vị', `THÁNG - ${year}`, ...Array(23).fill(''), 'Tổng Phạt', 'Tổng Thưởng', 'Tổng T/P', 'Tổng Ngày Công Phạt'];
+            const headerRow1 = ['Hạng', 'Họ Tên', 'Đơn Vị', `THÁNG - ${year}`, ...Array(23).fill(''), 'Tổng Phạt', 'Tổng Thưởng', 'Tổng $P Ngoài NC', 'Tổng Ngày Công Phạt'];
             const headerRow2 = ['', '', '', ...months.flatMap(m => [m, '']), '', '', '', ''];
             const headerRow3 = ['', '', '', ...Array(24).fill(0).map((_, i) => i % 2 === 0 ? 'P' : 'T'), '', '', '', ''];
 
@@ -1869,13 +1954,13 @@
                 const line = [idx + 1, row.name, row.unit];
                 for (let i = 1; i <= 12; i++) { const [p, t] = row.months['t' + i] || [0, 0]; line.push(p, t); }
                 const days = Number.isInteger(row.totalPenaltyDays) ? row.totalPenaltyDays : Number((row.totalPenaltyDays || 0).toFixed(1));
-                line.push(row.rowP, row.rowT, row.rowP + row.rowT, days);
+                line.push(row.rowP, row.rowT, Math.round(row.totalPenaltyMoney || 0), days);
                 return line;
             });
 
             if (format === 'csv') {
                 const esc = v => `"${String(v ?? '').replace(/"/g, '""')}"`;
-                const flatHeaders = ['Hạng','Họ Tên','Đơn Vị', ...months.flatMap(m => [m+' P', m+' T']), 'Tổng Phạt','Tổng Thưởng','Tổng T/P','Tổng Ngày Công Phạt'];
+                const flatHeaders = ['Hạng','Họ Tên','Đơn Vị', ...months.flatMap(m => [m+' P', m+' T']), 'Tổng Phạt','Tổng Thưởng','Tổng $P Ngoài NC','Tổng Ngày Công Phạt'];
                 let csv = '\uFEFF' + esc(`BÁO CÁO TỔNG SỐ LỖI VI PHẠM & KHEN THƯỞNG NHÂN VIÊN - NĂM ${year}`) + '\n';
                 csv += flatHeaders.map(esc).join(',') + '\n';
                 dataRows.forEach(line => { csv += line.map(esc).join(',') + '\n'; });
@@ -1914,8 +1999,8 @@
             styleHeaderRow(ws, 3, endCol);
 
             // Tô màu các cột "Tổng" khớp màu trên giao diện (đỏ/xanh lá/tím/cam).
-            const colColors = { 27: 'FEE2E2', 28: 'D1FAE5', 29: 'E0E7FF', 30: 'FFEDD5' };
-            const colFonts = { 27: '991B1B', 28: '065F46', 29: '3730A3', 30: '9A3412' };
+            const colColors = { 27: 'FEE2E2', 28: 'D1FAE5', 29: 'EDE9FE', 30: 'FFEDD5' };
+            const colFonts = { 27: '991B1B', 28: '065F46', 29: '5B21B6', 30: '9A3412' };
             for (let r = 4; r <= endRow; r++) {
                 Object.keys(colColors).forEach(cKey => {
                     const c = Number(cKey);
@@ -2114,7 +2199,7 @@
 
         // Xuất TOÀN BỘ 3 loại phiếu (Phạt/Thưởng/Hủy) vào CÙNG 1 SHEET duy nhất, xếp thành 3 khối liên tiếp.
         // Không tô màu nền ô, chữ giữ nguyên màu đen — chỉ dùng đậm/cỡ chữ/khung viền để phân biệt.
-        function buildMonthlyExportSheet(period, phatRecords, thuongRecords, huyRecords, totalLine) {
+        function buildMonthlyExportSheet(period, phatHuyRecords, thuongRecords, totalLine) {
             const headers = monthlyColumns.filter(c => c.key !== 'actions').map(c => c.label);
             const endCol = headers.length - 1;
             const toRow = r => [r.stt, r.name, r.unit || '', r.dept || '', formatDateVN(r.date), r.type || '', r.unitVal || '', r.reason || '', r.note || '', r.countP || 0, r.countT || 0];
@@ -2134,9 +2219,10 @@
                 sectionMeta.push({ titleRow, headerRow, dataStart, dataEnd });
             }
 
-            addSection(`PHIẾU PHẠT (${phatRecords.length})`, phatRecords);
+            // Gộp Phạt & Hủy thành MỘT khối liên tục, đúng như khung "Danh sách phiếu Phạt & Hủy" trên giao diện
+            // (số thứ tự chạy liên tục theo đúng thứ tự hiển thị, không tách riêng theo loại).
+            addSection(`PHIẾU PHẠT & HỦY (${phatHuyRecords.length})`, phatHuyRecords);
             addSection(`PHIẾU THƯỞNG (${thuongRecords.length})`, thuongRecords);
-            addSection(`PHIẾU HỦY (${huyRecords.length})`, huyRecords);
 
             const totalRow = aoa.length;
             aoa.push([totalLine]);
@@ -2219,13 +2305,15 @@
             });
             const withCounts = all.map(r => ({ ...r, countP: countMap[r.name]?.countP || 0, countT: countMap[r.name]?.countT || 0 }));
 
-            // Y HỆT thứ tự hiển thị trên giao diện (khung Phạt&Hủy dùng sortState 'phat', khung Thưởng dùng sortState 'thuong').
-            const phatRecords   = sortRecords(withCounts.filter(r => r.type === 'Phạt'), 'phat');
-            const thuongRecords = sortRecords(withCounts.filter(r => r.type === 'Thưởng'), 'thuong');
-            const huyRecords    = sortRecords(withCounts.filter(r => r.type === 'Hủy'), 'phat');
+            // Y HỆT khung "Danh sách phiếu Phạt & Hủy" trên giao diện: MỘT danh sách gộp chung,
+            // số thứ tự chạy liên tục theo đúng thứ tự đang hiển thị (sortState 'phat').
+            const phatHuyRecords = sortRecords(withCounts.filter(r => r.type === 'Phạt' || r.type === 'Hủy'), 'phat');
+            const thuongRecords  = sortRecords(withCounts.filter(r => r.type === 'Thưởng'), 'thuong');
 
-            const totalAll = phatRecords.length + thuongRecords.length + huyRecords.length;
-            const totalLine = `TỔNG ${totalAll} PHIẾU GỒM: ${phatRecords.length} PHẠT + ${thuongRecords.length} THƯỞNG + ${huyRecords.length} HỦY`;
+            const countP = phatHuyRecords.filter(r => r.type === 'Phạt').length;
+            const countH = phatHuyRecords.filter(r => r.type === 'Hủy').length;
+            const totalAll = phatHuyRecords.length + thuongRecords.length;
+            const totalLine = `TỔNG ${totalAll} PHIẾU GỒM: ${countP} PHẠT + ${thuongRecords.length} THƯỞNG + ${countH} HỦY`;
             const headers = monthlyColumns.filter(c => c.key !== 'actions').map(c => c.label);
 
             if (format === 'csv') {
@@ -2239,9 +2327,8 @@
                     });
                     csv += '\n';
                 };
-                writeSection(`PHIẾU PHẠT (${phatRecords.length})`, phatRecords);
+                writeSection(`PHIẾU PHẠT & HỦY (${phatHuyRecords.length})`, phatHuyRecords);
                 writeSection(`PHIẾU THƯỞNG (${thuongRecords.length})`, thuongRecords);
-                writeSection(`PHIẾU HỦY (${huyRecords.length})`, huyRecords);
                 csv += esc(totalLine) + '\n';
 
                 const blob = new Blob([csv], { type: 'text/csv;charset=utf-8' });
@@ -2253,7 +2340,7 @@
                 return;
             }
 
-            const ws = buildMonthlyExportSheet(period, phatRecords, thuongRecords, huyRecords, totalLine);
+            const ws = buildMonthlyExportSheet(period, phatHuyRecords, thuongRecords, totalLine);
             const wb = XLSX.utils.book_new();
             XLSX.utils.book_append_sheet(wb, ws, 'Thuong-Phat-Huy');
             XLSX.writeFile(wb, `Danh_Sach_Thuong_Phat_${period}.xlsx`);
