@@ -978,6 +978,16 @@
                 const allIds = Object.values(monthlyRecords).flat().map(r => Number(r.id) || 0);
                 recordIdCounter = Math.max(recordIdCounter, ...allIds) + 1;
                 normalizeEntryOrders();
+
+                // SỬA LỖI: các kỳ tháng được thêm ở phiên trước (qua "Thêm Kỳ Mới") chỉ tồn tại dưới
+                // dạng <option> trong dropdown, KHÔNG được lưu riêng — nên khi tải lại dữ liệu (từ Cloud
+                // hoặc bộ nhớ tạm), dropdown bị reset về danh sách kỳ mặc định trong HTML, làm "biến mất"
+                // các kỳ mới dù dữ liệu bên trong vẫn còn nguyên. Khôi phục lại option cho MỌI kỳ có dữ liệu.
+                Object.keys(monthlyRecords).forEach(period => {
+                    const pk = parsePeriodKey(period);
+                    const label = pk ? `Tháng ${String(pk.month).padStart(2, '0')}/${pk.year} (Kỳ ${period})` : period;
+                    ensurePeriodOption(period, label);
+                });
             }
             renderStaffTable();
             updateMonthlyView();
