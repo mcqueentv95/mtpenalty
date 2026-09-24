@@ -740,6 +740,26 @@
             });
         }
 
+        // Chọn lại kỳ tháng MỚI NHẤT hiện có trong dropdown "Chọn Kỳ Tháng" — gọi sau khi danh sách
+        // kỳ tháng vừa được nạp/khôi phục (khi mở app hoặc tải dữ liệu Cloud), vì trước đó dropdown chỉ
+        // được sắp xếp lại đúng thứ tự nhưng vẫn giữ nguyên kỳ ĐANG chọn (có thể là kỳ cũ / mặc định).
+        function selectNewestAvailablePeriod() {
+            const sel = document.getElementById('monthly-period');
+            if (!sel || sel.options.length === 0) return;
+            let newestOpt = sel.options[0];
+            let newestVal = -Infinity;
+            [...sel.options].forEach(o => {
+                const pk = parsePeriodKey(o.value);
+                if (pk) {
+                    const v = pk.year * 12 + pk.month;
+                    if (v > newestVal) { newestVal = v; newestOpt = o; }
+                }
+            });
+            sel.value = newestOpt.value;
+            const formSel = document.getElementById('form-period');
+            if (formSel && [...formSel.options].some(o => o.value === newestOpt.value)) formSel.value = newestOpt.value;
+        }
+
         function openModalAddPeriod() {
             if (guardEdit()) return;
             const now = new Date();
@@ -988,6 +1008,8 @@
                     const label = pk ? `Tháng ${String(pk.month).padStart(2, '0')}/${pk.year} (Kỳ ${period})` : period;
                     ensurePeriodOption(period, label);
                 });
+                // Luôn hiển thị kỳ tháng MỚI NHẤT trước, thay vì giữ kỳ cũ đang chọn mặc định.
+                selectNewestAvailablePeriod();
             }
             renderStaffTable();
             updateMonthlyView();
@@ -1734,6 +1756,7 @@
                 const oldRecords = monthlyRecords[oldPeriod] || [];
                 const idx = oldRecords.findIndex(r => r.id == editingRecordContext.id);
                 if (idx === -1) return;
+                const originalRecord = oldRecords[idx];
                 const updated = {
                     id: editingRecordContext.id,
                     name: document.getElementById('form-name').value,
@@ -1744,7 +1767,10 @@
                     unitVal: document.getElementById('form-unitval').value,
                     reason: document.getElementById('form-reason').value,
                     note: document.getElementById('form-note').value,
-                    entryOrder: entryOrderCounter++
+                    // GIỮ NGUYÊN entryOrder gốc — quyết định vị trí/STT của phiếu trong danh sách.
+                    // Trước đây bị gán entryOrderCounter++ (luôn tăng), khiến phiếu vừa sửa luôn bị
+                    // đẩy xuống CUỐI danh sách dù chỉ chỉnh sửa nội dung, không đổi thứ tự thủ công.
+                    entryOrder: originalRecord.entryOrder
                 };
                 ensureEmployeeExists(updated.name, updated.unit, updated.dept);
 
