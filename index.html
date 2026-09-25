@@ -986,7 +986,7 @@
                         name: String(r.name || '').trim(),
                         unit: String(r.unit || '').trim(),
                         dept: String(r.dept || '').trim(),
-                        date: String(r.date || '').trim(),
+                        date: toISODateStr(r.date),
                         type: String(r.type || 'Phạt').trim(),
                         unitVal: String(r.unitVal || '').trim(),
                         reason: String(r.reason || '').trim(),
@@ -1646,6 +1646,15 @@
             return d ? d.getTime() : Number.POSITIVE_INFINITY;
         }
 
+        // Chuẩn hóa MỌI dạng ngày (Date object, số serial Excel, chuỗi ISO đầy đủ như
+        // "2026-08-05T00:00:00.000Z" từ Google Sheets, DD/MM/YYYY...) về đúng "YYYY-MM-DD"
+        // — định dạng DUY NHẤT mà ô <input type="date"> chấp nhận hiển thị.
+        function toISODateStr(value) {
+            const d = parseFlexibleDate(value);
+            if (!d || Number.isNaN(d.getTime())) return String(value || '').trim();
+            return `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}-${String(d.getDate()).padStart(2, '0')}`;
+        }
+
         function renderPanel(tbodyId, records, badgeClass) {
             const tbody = document.getElementById(tbodyId);
             tbody.innerHTML = '';
@@ -1715,7 +1724,7 @@
             document.getElementById('form-unit').value = rec.unit;
             document.getElementById('form-dept').value = rec.dept || '';
             document.getElementById('form-type').value = rec.type;
-            document.getElementById('form-date').value = rec.date;
+            document.getElementById('form-date').value = toISODateStr(rec.date);
             document.getElementById('form-unitval').value = rec.unitVal;
             document.getElementById('form-reason').value = rec.reason || '';
             document.getElementById('form-note').value = rec.note || '';
